@@ -88,10 +88,7 @@ class VerdictEngine:
         """Create result for non-checkable claims (opinions, predictions, etc)."""
         reason_map = {
             ClaimType.OPINION: "Opinions and value judgments cannot be fact-checked.",
-            ClaimType.PREDICTION: "Future predictions cannot be verified until they occur.",
-            ClaimType.QUESTION: "Questions are not claims that can be verified.",
-            ClaimType.COMMAND: "Commands are not claims that can be verified.",
-            ClaimType.OTHER: "This statement type cannot be fact-checked.",
+            ClaimType.UNKNOWN: "This statement type cannot be fact-checked.",
         }
         
         return VerifiedClaim(

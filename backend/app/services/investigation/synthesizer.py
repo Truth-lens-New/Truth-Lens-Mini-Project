@@ -34,7 +34,8 @@ class EvidenceSynthesizer:
         "misinformation", "disinformation", "fact check: false",
         "rated false", "pants on fire", "no scientific evidence",
         "conspiracy", "unsubstantiated", "baseless", "unfounded",
-        "claim is false", "no proof", "not accurate"
+        "claim is false", "no proof", "not accurate", "fraud",
+        "scam", "pseudoscientific", "refuted", "denies", "denied"
     ]
     
     # Keywords indicating support/true claim
@@ -43,14 +44,20 @@ class EvidenceSynthesizer:
         "fact check: true", "rated true", "evidence shows",
         "studies confirm", "research supports", "proven",
         "scientifically proven", "experts confirm", "data shows",
-        "officially confirmed", "established fact"
+        "officially confirmed", "established fact",
+        "found that", "concluded", "demonstrates", "linked to",
+        "associated with", "responsible for", "won the",
+        "is the", "was the", "located in", "born in",
+        "causes", "cause of", "leads to", "result of",
+        "resulted in", "due to", "because of"
     ]
     
     # Keywords indicating mixed/disputed status
     DISPUTE_KEYWORDS = [
         "disputed", "controversial", "mixed", "partly true",
         "half true", "mostly false", "lacks context", "misleading",
-        "out of context", "exaggerated", "more context needed"
+        "out of context", "exaggerated", "more context needed",
+        "debated", "unclear", "inconclusive", "conflicting"
     ]
     
     def __init__(self):

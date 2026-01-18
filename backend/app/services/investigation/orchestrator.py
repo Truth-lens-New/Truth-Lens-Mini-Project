@@ -129,12 +129,17 @@ class InvestigationOrchestrator:
     def _search_duckduckgo(self, claim_text: str, evidence: EvidenceCollection):
         """Search DuckDuckGo for relevant content."""
         try:
-            # Add "fact check" to get more relevant results
+            # Strategy 1: Specific "fact check" search
             search_query = f"{claim_text} fact check"
             results = self.ddg_searcher.search(search_query, max_results=3)
             
+            # Strategy 2: Fallback to general search if no results
+            if not results:
+                print(f"No results for '{search_query}', falling back to general search...")
+                results = self.ddg_searcher.search(claim_text, max_results=5)
+            
             for result in results:
-                # Skip if snippet is too short or irrelevant
+                # Skip if snippet is too short
                 if len(result.snippet) < 50:
                     continue
                     
