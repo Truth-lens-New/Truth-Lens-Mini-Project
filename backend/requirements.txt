@@ -13,3 +13,10 @@ spacy>=3.7.0
 google-generativeai>=0.3.0
 python-multipart>=0.0.6
 email-validator>=2.1.0
+
+# Phase 1 ML Dependencies
+transformers>=4.36.0
+torch>=2.1.0
+sentence-transformers>=2.2.2
+trafilatura>=1.6.0
+easyocr>=1.7.1
