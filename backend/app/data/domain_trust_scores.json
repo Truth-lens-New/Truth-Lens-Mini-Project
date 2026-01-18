@@ -1,0 +1,81 @@
+{
+    "fact_checkers": {
+        "snopes.com": 95,
+        "factcheck.org": 95,
+        "politifact.com": 90,
+        "altnews.in": 90,
+        "boomlive.in": 90,
+        "vishvasnews.com": 88,
+        "thequint.com": 80
+    },
+    "news_high_trust": {
+        "reuters.com": 95,
+        "apnews.com": 95,
+        "bbc.com": 90,
+        "bbc.co.uk": 90,
+        "theguardian.com": 85,
+        "nytimes.com": 85,
+        "washingtonpost.com": 85,
+        "thehindu.com": 85,
+        "indianexpress.com": 80,
+        "livemint.com": 80,
+        "economictimes.indiatimes.com": 78
+    },
+    "news_medium_trust": {
+        "ndtv.com": 75,
+        "hindustantimes.com": 75,
+        "timesofindia.indiatimes.com": 70,
+        "news18.com": 65,
+        "firstpost.com": 65,
+        "deccanherald.com": 72,
+        "theprint.in": 70,
+        "businesstoday.in": 70
+    },
+    "news_low_trust": {
+        "opindia.com": 40,
+        "swarajyamag.com": 45,
+        "thewire.in": 55,
+        "scroll.in": 55,
+        "newslaundry.com": 60
+    },
+    "academic": {
+        "pubmed.ncbi.nlm.nih.gov": 95,
+        "ncbi.nlm.nih.gov": 95,
+        "nature.com": 95,
+        "science.org": 95,
+        "thelancet.com": 95,
+        "nejm.org": 95,
+        "arxiv.org": 80,
+        "scholar.google.com": 75,
+        "researchgate.net": 70
+    },
+    "reference": {
+        "wikipedia.org": 75,
+        "en.wikipedia.org": 75,
+        "britannica.com": 85,
+        "wikidata.org": 85
+    },
+    "government": {
+        "who.int": 95,
+        "cdc.gov": 95,
+        "nih.gov": 95,
+        "pib.gov.in": 85,
+        "india.gov.in": 85,
+        "eci.gov.in": 90
+    },
+    "social_media": {
+        "twitter.com": 30,
+        "x.com": 30,
+        "facebook.com": 25,
+        "instagram.com": 25,
+        "reddit.com": 35,
+        "youtube.com": 35,
+        "tiktok.com": 20,
+        "whatsapp.com": 15
+    },
+    "search_engines": {
+        "duckduckgo.com": 60,
+        "google.com": 60
+    },
+    "default": 50
+}
