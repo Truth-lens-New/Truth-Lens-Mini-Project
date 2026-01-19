@@ -12,8 +12,17 @@ from typing import List, Optional
 
 from app.models.domain import InputType, ClaimType
 from app.services.input import InputGateway
+# Concurrency Fix
+from fastapi.concurrency import run_in_threadpool
 from app.services.extraction import ClaimExtractorV3
 from app.services.typing import ClaimClassifier
+
+# Database & Auth
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from app.core.database import get_db
+from app.core.security import get_current_user
+from app.models.check import Check
 
 
 router = APIRouter()
@@ -256,7 +265,11 @@ def get_verdict_engine_singleton():
 
 
 @router.post("/investigate", response_model=InvestigateResponseV3)
-def investigate_content(request: InvestigateRequestV3):
+async def investigate_content(
+    request: InvestigateRequestV3,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
     """
     Full investigation endpoint (Phase 2).
     
@@ -264,6 +277,7 @@ def investigate_content(request: InvestigateRequestV3):
     - Types each claim
     - Investigates checkable claims
     - Returns verdict with evidence trail
+    - SAVES result to history
     
     WARNING: This is slower than /analyze (~5-30 seconds per claim)
     as it performs actual internet research.
@@ -296,7 +310,8 @@ def investigate_content(request: InvestigateRequestV3):
         # Step 4: Investigate each claim
         verified_claims = []
         for typed_claim in typed_claims:
-            result = verdict_engine.verify(typed_claim)
+            # FIX: Offload synchronous blocking call to threadpool to prevent freezing event loop
+            result = await run_in_threadpool(verdict_engine.verify, typed_claim)
             
             # Build evidence list for response
             evidence = [
@@ -321,6 +336,40 @@ def investigate_content(request: InvestigateRequestV3):
                 investigation_time_ms=result.investigation_time_ms,
                 evidence=evidence
             ))
+
+            # --- Save to History (DB) ---
+            if result.verdict.value != "not_checkable":
+                try:
+                    # Map float confidence to string label for DB
+                    conf_score = result.confidence
+                    conf_label = "High" if conf_score >= 0.8 else "Medium" if conf_score >= 0.5 else "Low"
+                    
+                    # Determine input columns
+                    input_text_val = request.content if request.input_type == "text" else None
+                    input_url_val = request.content if request.input_type == "url" else None
+
+                    # Create DB record
+                    db_check = Check(
+                        user_id=current_user["user_id"],
+                        input_text=input_text_val,
+                        input_url=input_url_val,
+                        claim=result.original_text,
+                        verdict=result.verdict.value,
+                        confidence=conf_label, # DB expects string
+                        explanation=result.evidence_summary,
+                        pipeline_version="3.0.0",
+                        created_at=datetime.utcnow()
+                    )
+                    db.add(db_check)
+                except Exception as e:
+                    print(f"Failed to save history: {e}")
+        
+        # Commit all history items
+        try:
+            await db.commit()
+        except Exception as e:
+            print(f"DB Commit failed: {e}")
+            await db.rollback()
         
         # Calculate total time
         total_time = int((time.time() - start_time) * 1000)

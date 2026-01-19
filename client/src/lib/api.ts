@@ -56,6 +56,8 @@ export interface AnalyzeResponse {
 export interface HistoryItem {
     id: number;
     claim: string;
+    input_text?: string;
+    input_url?: string;
     verdict: string;
     confidence: string;
     explanation?: string;

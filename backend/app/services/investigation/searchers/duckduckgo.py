@@ -57,29 +57,34 @@ class DuckDuckGoSearcher:
             print("DuckDuckGo search unavailable - library not installed")
             return []
         
-        try:
-            with DDGS() as ddgs:
-                raw_results = list(ddgs.text(
-                    query, 
-                    max_results=max_results,
-                    safesearch='moderate'
-                ))
-            
-            results = []
-            for r in raw_results:
-                domain = self._extract_domain(r.get('href', ''))
-                results.append(SearchResult(
-                    title=r.get('title', ''),
-                    url=r.get('href', ''),
-                    snippet=r.get('body', ''),
-                    source_domain=domain
-                ))
-            
-            return results
-            
-        except Exception as e:
-            print(f"DuckDuckGo search error: {e}")
-            return []
+        import time
+        for attempt in range(3):
+            try:
+                with DDGS() as ddgs:
+                    raw_results = list(ddgs.text(
+                        query, 
+                        max_results=max_results,
+                        safesearch='moderate'
+                    ))
+                
+                results = []
+                for r in raw_results:
+                    domain = self._extract_domain(r.get('href', ''))
+                    results.append(SearchResult(
+                        title=r.get('title', ''),
+                        url=r.get('href', ''),
+                        snippet=r.get('body', ''),
+                        source_domain=domain
+                    ))
+                
+                return results
+                
+            except Exception as e:
+                print(f"DuckDuckGo search attempt {attempt+1} error: {e}")
+                if attempt < 2:
+                    time.sleep(2)
+        
+        return []
     
     def search_news(self, query: str, max_results: int = 10) -> List[SearchResult]:
         """

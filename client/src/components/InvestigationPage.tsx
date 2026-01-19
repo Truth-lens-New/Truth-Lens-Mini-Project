@@ -1,4 +1,5 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     CheckCircle2, XCircle, AlertTriangle,
@@ -10,7 +11,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
     Cell, PieChart, Pie
 } from 'recharts';
-import type { V3VerifiedClaim, V3EvidenceItem } from '../lib/api';
+import type { V3VerifiedClaim, V3EvidenceItem, HistoryItem } from '../lib/api';
 import { investigateClaim } from '../lib/api';
 
 // === Types ===
@@ -55,12 +56,11 @@ function GradientText({ children, className = '' }: { children: React.ReactNode;
         <span
             className={className}
             style={{
-                background: 'linear-gradient(135deg, #22d3ee 0%, #34d399 50%, #22d3ee 100%)', // Brighter cyan/emerald
+                backgroundImage: 'var(--gradient-primary)',
                 backgroundSize: '200% 200%',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
-                textShadow: '0 0 30px rgba(34, 211, 238, 0.3)', // Glow effect
             }}
         >
             {children}
@@ -75,14 +75,16 @@ function GlassCard({ children, className = '', glow = false }: {
 }) {
     return (
         <div
-            className={`relative rounded-3xl ${className}`}
-            style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-                boxShadow: glow ? '0 0 80px rgba(6, 182, 212, 0.15)' : '0 4px 20px rgba(0,0,0,0.2)',
-                backdropFilter: 'blur(10px)',
-            }}
+            className={`relative rounded-3xl backdrop-blur-xl overflow-hidden transition-all
+                border border-border/50 bg-card/60 shadow-xl
+                dark:border-white/10 dark:bg-gradient-to-br dark:from-card/80 dark:to-card/40
+                dark:shadow-[0_0_40px_-15px] dark:shadow-white/10
+                dark:ring-1 dark:ring-white/5
+                ${glow ? 'dark:border-primary/40 dark:shadow-primary/30' : ''}
+                ${className}`}
         >
+            {/* Dark mode top edge glow */}
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent hidden dark:block rounded-t-3xl" />
             {children}
         </div>
     );
@@ -140,7 +142,7 @@ function StepIndicator({
                 ) : (
                     <span
                         className="text-xl font-bold"
-                        style={{ color: isPending ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.8)' }}
+                        style={{ color: isPending ? 'var(--muted-foreground)' : 'var(--foreground)' }}
                     >
                         {step.num}
                     </span>
@@ -158,12 +160,11 @@ function StepIndicator({
 
             <div className="text-center">
                 <div
-                    className="text-sm font-bold tracking-wide uppercase"
-                    style={{
-                        color: isActive ? '#06b6d4' : isComplete ? '#10b981' : 'rgba(255,255,255,0.4)'
-                    }}
+                    className="text-sm font-bold tracking-wide uppercase transition-colors"
                 >
-                    {step.label}
+                    <span className={isActive ? 'text-accent-foreground' : isComplete ? 'text-green-500' : 'text-muted-foreground'}>
+                        {step.label}
+                    </span>
                 </div>
             </div>
         </motion.div>
@@ -184,22 +185,23 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="group relative p-6 rounded-2xl transition-all duration-300 hover:scale-[1.01] hover:bg-white/[0.04]"
-            style={{
-                background: 'rgba(255, 255, 255, 0.02)',
-                border: '1px solid rgba(255, 255, 255, 0.06)',
-            }}
+            className="group relative p-6 rounded-2xl transition-all duration-300 hover:scale-[1.01] backdrop-blur-sm
+                border border-border/40 bg-card
+                hover:bg-muted/10 dark:hover:bg-white/5
+                dark:border-white/10 dark:bg-gradient-to-br dark:from-card/60 dark:to-card/30
+                dark:hover:border-white/20 dark:shadow-[0_0_30px_-15px] dark:shadow-white/5
+                dark:ring-1 dark:ring-white/5"
         >
             <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-xl">
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center text-xl">
                         {icon}
                     </div>
                     <div>
-                        <div className="font-semibold text-white text-base truncate max-w-[180px]">
+                        <div className="font-semibold text-foreground text-base truncate max-w-[180px]">
                             {evidence.source_domain}
                         </div>
-                        <div className="text-xs text-white/40 uppercase tracking-wider font-medium">
+                        <div className="text-xs text-muted-foreground uppercase tracking-wider font-medium">
                             {evidence.source_type.replace('_', ' ')}
                         </div>
                     </div>
@@ -212,7 +214,7 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
                 </span>
             </div>
 
-            <p className="text-sm leading-relaxed mb-4 text-white/70">
+            <p className="text-sm leading-relaxed mb-4 text-muted-foreground">
                 "{evidence.text_preview}"
             </p>
 
@@ -251,6 +253,10 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
 }
 
 function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
+    // Detect dark mode using matchMedia
+    const isDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
+        || document.documentElement.classList.contains('dark');
+
     const trustData = useMemo(() => {
         return evidence.map((e) => ({
             name: e.source_domain,
@@ -273,25 +279,29 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
 
     if (evidence.length === 0) return null;
 
+    // Theme-aware colors
+    const labelColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
+    const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)';
+
     return (
         <div className="grid md:grid-cols-2 gap-6 mb-8">
             <GlassCard className="p-8">
                 <div className="flex items-center gap-3 mb-8">
                     <div className="p-2 rounded-lg bg-cyan-500/10">
-                        <BarChart3 className="w-5 h-5 text-cyan-400" />
+                        <BarChart3 className="w-5 h-5 text-cyan-500" />
                     </div>
-                    <h3 className="text-lg font-semibold text-white">Source Reliability</h3>
+                    <h3 className="text-lg font-semibold text-foreground">Source Reliability</h3>
                 </div>
                 <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={trustData} layout="vertical" margin={{ left: 0, right: 30, top: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={gridColor} />
                             <XAxis type="number" domain={[0, 100]} hide />
                             <YAxis
                                 type="category"
                                 dataKey="name"
                                 width={120}
-                                tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 500 }}
+                                tick={{ fill: labelColor, fontSize: 12, fontWeight: 500 }}
                                 axisLine={false}
                                 tickLine={false}
                             />
@@ -314,7 +324,7 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
                     <div className="p-2 rounded-lg bg-purple-500/10">
                         <Brain className="w-5 h-5 text-purple-400" />
                     </div>
-                    <h3 className="text-lg font-semibold text-white">Stance Distribution</h3>
+                    <h3 className="text-lg font-semibold text-foreground">Stance Distribution</h3>
                 </div>
                 <div className="h-[220px] flex items-center justify-center relative">
                     <ResponsiveContainer width="100%" height="100%">
@@ -334,15 +344,15 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
                         </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <div className="text-3xl font-bold text-white">{evidence.length}</div>
-                        <div className="text-xs text-white/50 uppercase tracking-widest mt-1">Sources</div>
+                        <div className="text-3xl font-bold text-foreground">{evidence.length}</div>
+                        <div className="text-xs text-muted-foreground uppercase tracking-widest mt-1">Sources</div>
                     </div>
                 </div>
                 <div className="flex justify-center gap-6 mt-4">
                     {stanceData.map(d => (
                         <div key={d.name} className="flex items-center gap-2">
                             <div className="w-3 h-3 rounded-full" style={{ background: d.color }} />
-                            <span className="text-sm text-white/70 font-medium">{d.name}</span>
+                            <span className="text-sm text-foreground/80 font-medium">{d.name}</span>
                         </div>
                     ))}
                 </div>
@@ -398,9 +408,9 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
             className="w-full"
         >
             <div className="relative overflow-hidden rounded-[2.5rem] p-[1px]" style={{ background: v.gradient }}>
-                <div className="absolute inset-0 opacity-20 bg-white mix-blend-overlay" />
+                <div className="absolute inset-0 opacity-20 bg-background mix-blend-overlay" />
 
-                <div className="relative bg-[#050505] rounded-[2.5rem] p-8 md:p-12 overflow-hidden">
+                <div className="relative bg-background/95 rounded-[2.5rem] p-8 md:p-12 overflow-hidden border border-border/20 shadow-2xl">
                     {/* Background glow for verdict */}
                     <div
                         className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20 blur-[100px]"
@@ -440,10 +450,10 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
 
                             <div className="bg-white/5 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
                                 <div className="flex items-center justify-between mb-3">
-                                    <span className="text-sm font-medium text-white/70">Confidence Level</span>
-                                    <span className="text-xl font-bold text-white">{confidence}%</span>
+                                    <span className="text-sm font-medium text-muted-foreground/70">Confidence Level</span>
+                                    <span className="text-xl font-bold text-foreground">{confidence}%</span>
                                 </div>
-                                <div className="h-3 bg-black/40 rounded-full overflow-hidden p-0.5">
+                                <div className="h-3 bg-muted/20 rounded-full overflow-hidden p-0.5">
                                     <motion.div
                                         initial={{ width: 0 }}
                                         animate={{ width: `${confidence}%` }}
@@ -454,41 +464,47 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
                                 </div>
                             </div>
 
-                            <p className="text-xl leading-relaxed text-white/80 font-light">
+                            <p className="text-xl leading-relaxed text-foreground/80 font-light">
                                 {claim.evidence_summary}
                             </p>
                         </div>
 
                         {/* Quick Stats Column */}
                         <div className="w-full md:w-72 space-y-4">
-                            <div className="group bg-white/[0.03] hover:bg-white/[0.06] transition-colors rounded-2xl p-5 border border-white/5">
+                            <div className="group rounded-2xl p-5 transition-colors
+                                bg-muted/30 hover:bg-muted/50 border border-border/50
+                                dark:bg-white/[0.03] dark:hover:bg-white/[0.06] dark:border-white/5">
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="p-2 rounded-lg bg-blue-500/20">
-                                        <Database className="w-4 h-4 text-blue-400" />
+                                        <Database className="w-4 h-4 text-blue-500 dark:text-blue-400" />
                                     </div>
-                                    <div className="text-xs font-bold text-white/40 uppercase tracking-wider">Sources Checked</div>
+                                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Sources Checked</div>
                                 </div>
-                                <div className="text-3xl font-bold text-white pl-1">{claim.sources_checked}</div>
+                                <div className="text-3xl font-bold text-foreground pl-1">{claim.sources_checked}</div>
                             </div>
 
-                            <div className="group bg-white/[0.03] hover:bg-white/[0.06] transition-colors rounded-2xl p-5 border border-white/5">
+                            <div className="group rounded-2xl p-5 transition-colors
+                                bg-muted/30 hover:bg-muted/50 border border-border/50
+                                dark:bg-white/[0.03] dark:hover:bg-white/[0.06] dark:border-white/5">
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="p-2 rounded-lg bg-emerald-500/20">
-                                        <Zap className="w-4 h-4 text-emerald-400" />
+                                        <Zap className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
                                     </div>
-                                    <div className="text-xs font-bold text-white/40 uppercase tracking-wider">Speed</div>
+                                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Speed</div>
                                 </div>
-                                <div className="text-3xl font-bold text-white pl-1">{claim.investigation_time_ms}ms</div>
+                                <div className="text-3xl font-bold text-foreground pl-1">{claim.investigation_time_ms}ms</div>
                             </div>
 
-                            <div className="group bg-white/[0.03] hover:bg-white/[0.06] transition-colors rounded-2xl p-5 border border-white/5">
+                            <div className="group rounded-2xl p-5 transition-colors
+                                bg-muted/30 hover:bg-muted/50 border border-border/50
+                                dark:bg-white/[0.03] dark:hover:bg-white/[0.06] dark:border-white/5">
                                 <div className="flex items-center gap-3 mb-2">
                                     <div className="p-2 rounded-lg bg-purple-500/20">
-                                        <Brain className="w-4 h-4 text-purple-400" />
+                                        <Brain className="w-4 h-4 text-purple-500 dark:text-purple-400" />
                                     </div>
-                                    <div className="text-xs font-bold text-white/40 uppercase tracking-wider">Category</div>
+                                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Category</div>
                                 </div>
-                                <div className="text-lg font-bold text-white pl-1 capitalize truncate">
+                                <div className="text-lg font-bold text-foreground pl-1 capitalize truncate">
                                     {claim.claim_type.replace(/_/g, ' ')}
                                 </div>
                             </div>
@@ -510,13 +526,13 @@ function NotCheckableDisplay({ claimType, text }: { claimType: string; text: str
 
             <h2 className="text-3xl font-bold text-white mb-4">Input Not Verifiable</h2>
 
-            <p className="text-lg text-white/60 max-w-2xl mx-auto mb-8 leading-relaxed">
-                The content you provided appears to be <span className="text-white font-semibold">"{claimType}"</span> which relies on subjective interpretation rather than objective facts.
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8 leading-relaxed">
+                The content you provided appears to be <span className="text-foreground font-semibold">"{claimType}"</span> which relies on subjective interpretation rather than objective facts.
             </p>
 
-            <div className="bg-white/5 rounded-2xl p-6 max-w-xl mx-auto border border-white/10">
-                <div className="text-xs text-white/40 uppercase tracking-widest mb-3">Your Input</div>
-                <p className="text-white/80 italic font-serif text-lg">"{text}"</p>
+            <div className="bg-muted/10 rounded-2xl p-6 max-w-xl mx-auto border border-border/10">
+                <div className="text-xs text-muted-foreground uppercase tracking-widest mb-3">Your Input</div>
+                <p className="text-foreground/90 italic font-serif text-lg">"{text}"</p>
             </div>
         </GlassCard>
     );
@@ -530,6 +546,7 @@ export function InvestigationPage() {
     const [verifiedClaims, setVerifiedClaims] = useState<V3VerifiedClaim[]>([]);
     const [activeClaimIndex, setActiveClaimIndex] = useState(0);
     const [error, setError] = useState<string | null>(null);
+    const [isArchived, setIsArchived] = useState(false);
 
     // Auto-detect URL
     const isUrl = useMemo(() => {
@@ -537,16 +554,54 @@ export function InvestigationPage() {
         return trimmed.startsWith('http://') || trimmed.startsWith('https://');
     }, [inputText]);
 
-    const runInvestigation = useCallback(async () => {
-        if (!inputText.trim()) return;
+    const location = useLocation();
+
+    useEffect(() => {
+        if (location.state?.archivedResult) {
+            const archived = location.state.archivedResult as HistoryItem;
+            // Map HistoryItem to V3VerifiedClaim
+            const confidenceMap: Record<string, number> = { 'High': 0.9, 'Medium': 0.6, 'Low': 0.3, 'high': 0.9, 'medium': 0.6, 'low': 0.3 };
+
+            const claim: V3VerifiedClaim = {
+                original_text: archived.input_text || archived.claim,
+                claim_type: 'fact',
+                verdict: (archived.verdict?.toLowerCase().replace(' ', '_') || 'unverified') as any,
+                confidence: confidenceMap[archived.confidence] || 0.5,
+                evidence_summary: archived.explanation || 'No explanation available for this archived result.',
+                evidence_count: 0,
+                sources_checked: 0,
+                investigation_time_ms: 0, // Unknown
+                evidence: [] // Evidence not archived in V1/V2
+            };
+
+            setVerifiedClaims([claim]);
+            setInputText(claim.original_text);
+            setCurrentStep('complete');
+            setIsArchived(true);
+        } else if (location.state?.initialQuery && !inputText) {
+            setInputText(location.state.initialQuery);
+        }
+    }, [location.state]);
+
+    // Effect to trigger run when inputText is set from navigation
+    useEffect(() => {
+        if (location.state?.initialQuery && inputText === location.state.initialQuery && currentStep === 'idle') {
+            runInvestigation();
+        }
+    }, [inputText, location.state, currentStep]);
+
+    const runInvestigation = useCallback(async (manualInput?: string) => {
+        const textToUse = manualInput || inputText;
+        if (!textToUse.trim()) return;
 
         setError(null);
         setVerifiedClaims([]);
         setCompletedSteps([]);
 
         // Determine input type
-        const inputType = isUrl ? 'url' : 'text';
-        const apiPromise = investigateClaim(inputText, inputType);
+        const autoIsUrl = textToUse.trim().startsWith('http://') || textToUse.trim().startsWith('https://'); // Recalculate for potential manual input
+        const inputType = autoIsUrl ? 'url' : 'text';
+        const apiPromise = investigateClaim(textToUse, inputType);
 
         // Animate through steps
         for (const step of STEPS) {
@@ -589,16 +644,8 @@ export function InvestigationPage() {
 
     return (
         <div
-            className="min-h-screen pt-28 pb-24 px-6 font-sans"
-            style={{ background: '#050505' }}
+            className="min-h-screen pt-28 pb-24 px-6 font-sans text-foreground transition-colors duration-300"
         >
-            {/* Background ambient light */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div
-                    className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[1000px] h-[600px] opacity-20 blur-[120px]"
-                    style={{ background: 'radial-gradient(circle, rgba(34, 211, 238, 0.4) 0%, transparent 70%)' }}
-                />
-            </div>
 
             <div className="relative z-10 max-w-7xl mx-auto">
 
@@ -610,18 +657,18 @@ export function InvestigationPage() {
                 >
                     <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
                         <span className="relative flex h-2 w-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isArchived ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                            <span className={`relative inline-flex rounded-full h-2 w-2 ${isArchived ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
                         </span>
-                        <span className="text-xs font-semibold text-white/80 uppercase tracking-widest">
-                            TruthLens V3 Active
+                        <span className="text-xs font-semibold text-foreground/80 uppercase tracking-widest">
+                            {isArchived ? 'Archived Analysis' : 'TruthLens V3 Active'}
                         </span>
                     </div>
 
                     <h1 className="text-6xl md:text-7xl font-bold mb-6 tracking-tight">
                         <GradientText>TruthLens Investigation</GradientText>
                     </h1>
-                    <p className="text-xl md:text-2xl font-light text-white/50 max-w-2xl mx-auto">
+                    <p className="text-xl md:text-2xl font-light text-muted-foreground max-w-2xl mx-auto">
                         Advanced claim verification and real-time evidence synthesis
                     </p>
                 </motion.div>
@@ -639,11 +686,11 @@ export function InvestigationPage() {
                                 {/* Glowing border effect */}
                                 <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-[2rem] opacity-30 group-hover:opacity-60 transition duration-1000 blur"></div>
 
-                                <div className="relative bg-[#0a0a0a] rounded-[2rem] p-1.5">
-                                    <div className="bg-[#050505] rounded-[1.8rem] p-8 md:p-10 relative overflow-hidden">
+                                <div className="relative bg-card rounded-[2rem] p-1.5 shadow-xl border border-border/20">
+                                    <div className="bg-background/50 rounded-[1.8rem] p-8 md:p-10 relative overflow-hidden backdrop-blur-sm">
 
                                         <div className="flex justify-between items-center mb-6">
-                                            <label className="text-sm font-semibold text-white/40 uppercase tracking-widest">
+                                            <label className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
                                                 Investigation Target
                                             </label>
                                             {isUrl && (
@@ -658,23 +705,23 @@ export function InvestigationPage() {
                                             value={inputText}
                                             onChange={(e) => setInputText(e.target.value)}
                                             placeholder="Paste a claim, sentence, or article URL..."
-                                            className="w-full h-40 bg-transparent text-3xl md:text-4xl font-light text-white placeholder-white/20 focus:outline-none resize-none"
+                                            className="w-full h-40 bg-transparent text-3xl md:text-4xl font-light text-foreground placeholder-muted-foreground/60 focus:outline-none resize-none"
                                             spellCheck={false}
                                         />
 
                                         <div className="flex justify-between items-end mt-6">
-                                            <div className="text-xs text-white/20">
+                                            <div className="text-xs text-muted-foreground/60">
                                                 Supports text, URLs, and social media links
                                             </div>
                                             <button
-                                                onClick={runInvestigation}
+                                                onClick={() => runInvestigation()}
                                                 disabled={!inputText.trim()}
                                                 className="group/btn relative px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden"
                                                 style={{
                                                     background: inputText.trim()
-                                                        ? 'linear-gradient(135deg, #22d3ee 0%, #34d399 100%)'
-                                                        : 'rgba(255,255,255,0.1)',
-                                                    color: inputText.trim() ? '#000' : 'rgba(255,255,255,0.3)',
+                                                        ? 'var(--gradient-primary)'
+                                                        : 'var(--muted)',
+                                                    color: inputText.trim() ? '#fff' : 'var(--muted-foreground)',
                                                 }}
                                             >
                                                 {/* Shimmer effect */}
@@ -729,17 +776,44 @@ export function InvestigationPage() {
                             animate={{ opacity: 1, scale: 1 }}
                         >
                             <GlassCard className="p-12 max-w-2xl mx-auto text-center">
-                                <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <div className="w-20 h-20 bg-destructive/10 rounded-full flex items-center justify-center mx-auto mb-6">
                                     <XCircle className="w-10 h-10 text-red-500" />
                                 </div>
-                                <h3 className="text-2xl font-bold text-white mb-2">Investigation Halted</h3>
-                                <p className="text-white/60 mb-8">{error}</p>
+                                <h3 className="text-2xl font-bold text-foreground mb-2">Investigation Halted</h3>
+                                <p className="text-muted-foreground mb-8">{error}</p>
                                 <button
                                     onClick={handleReset}
-                                    className="px-8 py-3 rounded-full font-bold bg-white/10 hover:bg-white/20 transition-colors text-white"
+                                    className="px-8 py-3 rounded-full font-bold bg-muted/20 hover:bg-muted/30 transition-colors text-foreground"
                                 >
                                     Retry Investigation
                                 </button>
+                            </GlassCard>
+                        </motion.div>
+                    )}
+
+                    {/* No Claims Found State */}
+                    {!primaryClaim && currentStep === 'complete' && !error && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                        >
+                            <GlassCard className="p-12 max-w-2xl mx-auto text-center" glow>
+                                <div className="w-20 h-20 bg-amber-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <AlertCircle className="w-10 h-10 text-amber-500" />
+                                </div>
+                                <h3 className="text-2xl font-bold text-foreground mb-2">No Verifiable Claims Found</h3>
+                                <p className="text-muted-foreground mb-8 max-w-md mx-auto">
+                                    The input provided doesn't contain a clear factual claim that can be verified.
+                                    Try providing a more specific statement or a longer text with concrete claims.
+                                </p>
+                                <div className="flex justify-center gap-4">
+                                    <button
+                                        onClick={handleReset}
+                                        className="px-8 py-3 rounded-full font-bold bg-muted/20 hover:bg-muted/30 transition-colors text-foreground"
+                                    >
+                                        Try Again
+                                    </button>
+                                </div>
                             </GlassCard>
                         </motion.div>
                     )}
@@ -754,7 +828,7 @@ export function InvestigationPage() {
                         >
                             {/* Action Bar */}
                             <div className="flex justify-between items-center">
-                                <div className="text-sm text-white/40">
+                                <div className="text-sm text-muted-foreground/60">
                                     Investigated {verifiedClaims.length} claim(s)
                                 </div>
                                 <button
@@ -784,7 +858,7 @@ export function InvestigationPage() {
                             {/* Detailed Evidence Grid */}
                             {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
                                 <div>
-                                    <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+                                    <h2 className="text-2xl font-bold text-foreground mb-8 flex items-center gap-3">
                                         <FileSearch className="w-6 h-6 text-emerald-400" />
                                         Verified Evidence Trail
                                     </h2>
@@ -797,9 +871,9 @@ export function InvestigationPage() {
                             )}
 
                             {/* Footer Disclaimer */}
-                            <div className="border-t border-white/5 pt-8 text-center">
-                                <p className="text-sm text-white/30">
-                                    TruthLens V3 AI Analysis • Generated in {(primaryClaim.investigation_time_ms / 1000).toFixed(2)}s • <span className="hover:text-white/50 cursor-pointer transition-colors">View Methodology</span>
+                            <div className="border-t border-border/30 dark:border-white/10 pt-8 text-center">
+                                <p className="text-xs text-muted-foreground/50 font-mono">
+                                    TruthLens v3.0 • Hybrid Pipeline Architecture • Analysis completed in {(primaryClaim.investigation_time_ms / 1000).toFixed(2)}s
                                 </p>
                             </div>
                         </motion.div>

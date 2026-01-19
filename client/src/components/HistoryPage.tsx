@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Search, FileText, ChevronRight, Filter, Trash2, Clock, Loader2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, FileText, ChevronRight, Filter, Trash2, Clock, Loader2, History } from 'lucide-react';
 import { getHistory, deleteHistoryItem, clearAllHistory, type HistoryItem } from '../lib/api';
 import type { Page } from '../App';
 
@@ -8,13 +9,13 @@ interface HistoryPageProps {
 }
 
 export function HistoryPage({ onNavigate }: HistoryPageProps) {
+    const navigate = useNavigate();
     const [history, setHistory] = useState<HistoryItem[]>([]);
     const [selectedItem, setSelectedItem] = useState<HistoryItem | null>(null);
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
-    // Load history from backend on mount
     useEffect(() => {
         loadHistory();
     }, []);
@@ -24,7 +25,6 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
         setError(null);
         try {
             const response = await getHistory();
-            // Ensure response is an array (API might return object with items property)
             let items: HistoryItem[] = [];
             if (Array.isArray(response)) {
                 items = response;
@@ -34,29 +34,30 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
             setHistory(items);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to load history');
-            setHistory([]); // Reset to empty array on error
+            setHistory([]);
         } finally {
             setLoading(false);
         }
     };
 
-    // Defensive check: ensure history is an array before filtering
     const filteredData = Array.isArray(history) ? history.filter(item =>
         (item.claim || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.verdict?.toLowerCase().includes(searchQuery.toLowerCase())
     ) : [];
 
     const getVerdictColor = (verdict?: string) => {
-        if (!verdict) return 'text-[#D6D6D6]';
+        if (!verdict) return 'text-muted-foreground';
         const v = verdict.toLowerCase();
-        if (v.includes('true') || v.includes('verified') || v.includes('accurate')) return 'text-[#00FFC3]';
+        // Check false/misleading FIRST
         if (v.includes('false') || v.includes('misleading')) return 'text-red-400';
-        return 'text-[#99F8FF]';
+        if (v.includes('true') || v.includes('verified') || v.includes('accurate')) return 'text-emerald-400';
+        return 'text-amber-400';
     };
 
     const formatDate = (dateStr: string) => {
-        const date = new Date(dateStr);
-        // Add timezone offset for IST (+5:30) if server returns UTC
+        // Ensure UTC interpretation if missing timezone
+        const utcDateStr = dateStr.endsWith('Z') || dateStr.includes('+') ? dateStr : `${dateStr}Z`;
+        const date = new Date(utcDateStr);
         return date.toLocaleString('en-IN', {
             timeZone: 'Asia/Kolkata',
             month: 'short',
@@ -94,37 +95,46 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
 
     if (loading) {
         return (
-            <div className="min-h-screen pt-20 pb-12 px-8 flex items-center justify-center">
+            <div className="min-h-screen flex items-center justify-center">
                 <div className="text-center">
-                    <Loader2 className="w-12 h-12 text-[#00FFC3] mx-auto mb-4 animate-spin" />
-                    <p className="text-[#D6D6D6]">Loading history...</p>
+                    <Loader2 className="w-12 h-12 text-primary mx-auto mb-4 animate-spin" />
+                    <p className="text-muted-foreground">Loading history...</p>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen pt-20 pb-12 px-8">
-            <div className="fixed inset-0 pointer-events-none">
-                <div className="absolute top-40 left-1/3 w-[500px] h-[500px] bg-[#00FFC3]/5 rounded-full blur-[140px]" />
-            </div>
-
-            <div className="relative z-10 max-w-[1600px] mx-auto">
-                <div className="mb-8 flex items-center justify-between">
-                    <div>
-                        <h1 className="text-4xl mb-2">Verification History</h1>
-                        <p className="text-[#D6D6D6]">View and manage past analyses</p>
+        <div className="min-h-screen pb-16">
+            <div className="relative z-10 max-w-7xl mx-auto px-6 pt-8">
+                {/* Header */}
+                <header className="mb-10">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-10 h-10 rounded-xl bg-muted/50 dark:bg-white/10 flex items-center justify-center
+                                    dark:shadow-[0_0_15px_-5px] dark:shadow-white/20 dark:ring-1 dark:ring-white/10">
+                                    <History className="w-5 h-5 text-muted-foreground" />
+                                </div>
+                                <span className="text-xs font-mono uppercase tracking-[0.2em] text-muted-foreground/60">
+                                    Archive
+                                </span>
+                            </div>
+                            <h1 className="text-4xl font-light tracking-tight text-foreground">Verification History</h1>
+                        </div>
+                        {history.length > 0 && (
+                            <button
+                                onClick={handleClearAll}
+                                className="px-4 py-2 rounded-xl backdrop-blur-sm text-sm flex items-center gap-2 transition-all
+                                    bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20
+                                    dark:shadow-[0_0_15px_-5px] dark:shadow-red-500/30"
+                            >
+                                <Trash2 className="w-4 h-4" />
+                                Clear All
+                            </button>
+                        )}
                     </div>
-                    {history.length > 0 && (
-                        <button
-                            onClick={handleClearAll}
-                            className="px-4 py-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 hover:bg-red-500/20 transition-all text-sm flex items-center gap-2"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                            Clear All
-                        </button>
-                    )}
-                </div>
+                </header>
 
                 {error && (
                     <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400">
@@ -134,42 +144,59 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
                 )}
 
                 {/* Search */}
-                <div className="mb-6">
+                <div className="mb-8">
                     <div className="relative max-w-md">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-[#666]" />
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
                         <input
                             type="text"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             placeholder="Search claims or verdicts..."
-                            className="w-full pl-12 pr-4 py-3 rounded-xl bg-white/5 border border-white/10 focus:border-[#00FFC3]/30 focus:outline-none"
+                            className="w-full pl-12 pr-4 py-3 rounded-xl backdrop-blur-sm transition-all
+                                bg-card/50 border border-border/50 focus:border-primary/50 focus:outline-none
+                                text-foreground placeholder-muted-foreground
+                                dark:bg-card/60 dark:border-white/10 dark:focus:border-primary/50
+                                dark:ring-1 dark:ring-white/5"
                         />
                     </div>
                 </div>
 
                 {history.length === 0 ? (
-                    <div className="p-12 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10 text-center">
-                        <Clock className="w-16 h-16 text-[#666] mx-auto mb-4" />
-                        <h2 className="text-xl mb-2">No History Yet</h2>
-                        <p className="text-[#D6D6D6] mb-6">Your verification history will appear here after you analyze claims.</p>
+                    <div className="p-12 rounded-2xl backdrop-blur-sm text-center relative overflow-hidden
+                        border border-border/50 bg-card/50
+                        dark:border-border/30 dark:bg-gradient-to-br dark:from-card/60 dark:to-card/30
+                        dark:shadow-[0_0_40px_-15px] dark:shadow-white/10
+                        dark:ring-1 dark:ring-white/5">
+                        <Clock className="w-16 h-16 text-muted-foreground/50 mx-auto mb-4" />
+                        <h2 className="text-xl mb-2 text-foreground">No History Yet</h2>
+                        <p className="text-muted-foreground mb-6">Your verification history will appear here after you analyze claims.</p>
                         <button
-                            onClick={() => onNavigate?.('verify-article')}
-                            className="px-6 py-3 rounded-xl bg-gradient-to-r from-[#99F8FF] to-[#00FFC3] text-black hover:shadow-[0_0_30px_rgba(0,255,195,0.3)] transition-all"
+                            onClick={() => onNavigate?.('investigate')}
+                            className="px-6 py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-medium
+                                shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all"
                         >
-                            Verify Your First Claim
+                            Start Your First Investigation
                         </button>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-3 gap-6">
+                    <div className="grid grid-cols-12 gap-6">
                         {/* History List */}
-                        <div className="col-span-2 p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10">
-                            <div className="space-y-2">
+                        <div className="col-span-12 lg:col-span-8 p-6 rounded-2xl backdrop-blur-sm relative overflow-hidden
+                            border border-border/50 bg-card/50
+                            dark:border-border/30 dark:bg-gradient-to-br dark:from-card/60 dark:to-card/30
+                            dark:shadow-[0_0_40px_-15px] dark:shadow-white/10
+                            dark:ring-1 dark:ring-white/5">
+
+                            {/* Dark mode edge glow */}
+                            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent hidden dark:block rounded-t-2xl" />
+
+                            <div className="space-y-2 relative">
                                 {/* Header */}
-                                <div className="grid grid-cols-12 gap-4 pb-3 border-b border-white/10 text-sm text-[#D6D6D6]">
+                                <div className="grid grid-cols-12 gap-4 pb-3 border-b border-border/30 dark:border-white/10 text-xs font-mono uppercase tracking-wider text-muted-foreground">
                                     <div className="col-span-6">Claim</div>
                                     <div className="col-span-2">Date</div>
                                     <div className="col-span-2">Verdict</div>
-                                    <div className="col-span-2">Actions</div>
+                                    <div className="col-span-2 text-right">Actions</div>
                                 </div>
 
                                 {/* Rows */}
@@ -178,30 +205,31 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
                                         key={item.id}
                                         onClick={() => setSelectedItem(item)}
                                         className={`w-full grid grid-cols-12 gap-4 p-4 rounded-xl transition-all text-left cursor-pointer ${selectedItem?.id === item.id
-                                            ? 'bg-white/10 border border-[#00FFC3]/30'
-                                            : 'bg-white/5 border border-transparent hover:bg-white/10 hover:border-white/10'
+                                            ? 'bg-primary/10 border border-primary/30 dark:shadow-[0_0_20px_-10px] dark:shadow-primary/40'
+                                            : 'bg-card/30 dark:bg-white/5 border border-transparent hover:bg-muted/20 dark:hover:bg-white/10 hover:border-border/50 dark:hover:border-white/20'
                                             }`}
                                     >
                                         <div className="col-span-6 flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center flex-shrink-0">
+                                            <div className="w-8 h-8 rounded-lg bg-violet-500/10 dark:bg-violet-500/20 text-violet-400 flex items-center justify-center flex-shrink-0
+                                                dark:shadow-[0_0_10px_-3px] dark:shadow-violet-500/40">
                                                 <FileText className="w-4 h-4" />
                                             </div>
-                                            <span className="truncate">{(item.claim || 'Unknown claim').slice(0, 80)}{(item.claim || '').length > 80 ? '...' : ''}</span>
+                                            <span className="truncate text-foreground">{(item.claim || 'Unknown claim').slice(0, 80)}{(item.claim || '').length > 80 ? '...' : ''}</span>
                                         </div>
-                                        <div className="col-span-2 flex items-center text-sm text-[#D6D6D6]">
+                                        <div className="col-span-2 flex items-center text-xs text-muted-foreground">
                                             {formatDate(item.created_at)}
                                         </div>
-                                        <div className={`col-span-2 flex items-center ${getVerdictColor(item.verdict)}`}>
+                                        <div className={`col-span-2 flex items-center text-sm font-medium ${getVerdictColor(item.verdict)}`}>
                                             {item.verdict || 'Unknown'}
                                         </div>
                                         <div className="col-span-2 flex items-center justify-end gap-2">
                                             <button
                                                 onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
-                                                className="p-2 rounded-lg hover:bg-red-500/20 text-[#666] hover:text-red-400 transition-all"
+                                                className="p-2 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-400 transition-all"
                                             >
                                                 <Trash2 className="w-4 h-4" />
                                             </button>
-                                            <ChevronRight className="w-4 h-4 text-[#666]" />
+                                            <ChevronRight className="w-4 h-4 text-muted-foreground" />
                                         </div>
                                     </div>
                                 ))}
@@ -209,70 +237,78 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
                         </div>
 
                         {/* Detail Panel */}
-                        <div className="col-span-1">
+                        <div className="col-span-12 lg:col-span-4">
                             {selectedItem ? (
-                                <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10 sticky top-24">
-                                    <h3 className="text-xl mb-4">Analysis Details</h3>
-                                    <div className="space-y-4">
+                                <div className="p-6 rounded-2xl backdrop-blur-sm sticky top-24 relative overflow-hidden
+                                    border border-primary/30 bg-card/50
+                                    dark:border-primary/40 dark:bg-gradient-to-br dark:from-primary/10 dark:via-card/60 dark:to-card/40
+                                    dark:shadow-[0_0_40px_-15px] dark:shadow-primary/30
+                                    dark:ring-1 dark:ring-white/5">
+
+                                    {/* Dark mode edge glow */}
+                                    <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent hidden dark:block rounded-t-2xl" />
+
+                                    <h3 className="text-lg font-medium mb-4 text-foreground relative">Analysis Details</h3>
+                                    <div className="space-y-4 relative">
                                         <div>
-                                            <div className="text-xs text-[#D6D6D6] mb-1">Claim</div>
-                                            <div className="text-sm">{selectedItem.claim || 'Unknown'}</div>
+                                            <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Claim</div>
+                                            <div className="text-sm text-foreground">{selectedItem.claim || 'Unknown'}</div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-[#D6D6D6] mb-1">Date</div>
-                                            <div className="text-sm">{formatDate(selectedItem.created_at)}</div>
+                                            <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Date</div>
+                                            <div className="text-sm text-foreground">{formatDate(selectedItem.created_at)}</div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-[#D6D6D6] mb-1">Verdict</div>
-                                            <div className={`text-sm ${getVerdictColor(selectedItem.verdict)}`}>
+                                            <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Verdict</div>
+                                            <div className={`text-sm font-medium ${getVerdictColor(selectedItem.verdict)}`}>
                                                 {selectedItem.verdict || 'Unknown'}
                                             </div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-[#D6D6D6] mb-1">Confidence</div>
-                                            <div className="text-sm capitalize">{selectedItem.confidence || 'Unknown'}</div>
+                                            <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Confidence</div>
+                                            <div className="text-sm capitalize text-foreground">{selectedItem.confidence || 'Unknown'}</div>
                                         </div>
                                         <div>
-                                            <div className="text-xs text-[#D6D6D6] mb-1">Explanation</div>
-                                            <div className="text-sm text-[#D6D6D6]">{(selectedItem.explanation || 'N/A').slice(0, 200)}...</div>
+                                            <div className="text-xs font-mono uppercase tracking-wider text-muted-foreground mb-1">Explanation</div>
+                                            <div className="text-sm text-muted-foreground leading-relaxed">{(selectedItem.explanation || 'N/A').slice(0, 200)}...</div>
                                         </div>
 
-                                        {/* View Full Analysis Button */}
                                         <button
                                             onClick={() => {
-                                                // Save selected item to localStorage for ArticleVerification to restore
-                                                localStorage.setItem('truthlens_current_result', JSON.stringify({
-                                                    claim: selectedItem.claim || '',
-                                                    result: {
-                                                        claim: selectedItem.claim,
-                                                        verdict: selectedItem.verdict,
-                                                        confidence: selectedItem.confidence,
-                                                        explanation: selectedItem.explanation,
-                                                        domain_trust: { domain: null, score: 'unknown' },
-                                                        factcheck: { found: false },
-                                                        evidence: [],
-                                                        stance_summary: { supports: 0, refutes: 0, discuss: 0, unrelated: 0 }
+                                                navigate('/investigate', {
+                                                    state: {
+                                                        archivedResult: selectedItem
                                                     }
-                                                }));
-                                                onNavigate?.('verify-article');
+                                                });
                                             }}
-                                            className="w-full mt-4 py-3 rounded-xl bg-gradient-to-r from-[#99F8FF] to-[#00FFC3] text-black hover:shadow-[0_0_30px_rgba(0,255,195,0.3)] transition-all text-sm font-medium"
+                                            className="w-full mt-4 py-3 rounded-xl bg-gradient-to-r from-primary to-primary/80 text-primary-foreground font-medium text-sm
+                                                shadow-lg shadow-primary/25 hover:shadow-xl hover:shadow-primary/30 transition-all"
                                         >
                                             View Full Analysis
                                         </button>
                                     </div>
                                 </div>
                             ) : (
-                                <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10 h-[300px] flex items-center justify-center text-center">
+                                <div className="p-6 rounded-2xl backdrop-blur-sm h-[300px] flex items-center justify-center text-center
+                                    border border-border/50 bg-card/50
+                                    dark:border-border/30 dark:bg-gradient-to-br dark:from-card/60 dark:to-card/30
+                                    dark:ring-1 dark:ring-white/5">
                                     <div>
-                                        <Filter className="w-12 h-12 text-[#666] mx-auto mb-3" />
-                                        <p className="text-[#D6D6D6]">Select an item to view details</p>
+                                        <Filter className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+                                        <p className="text-muted-foreground">Select an item to view details</p>
                                     </div>
                                 </div>
                             )}
                         </div>
                     </div>
                 )}
+
+                {/* Footer */}
+                <footer className="mt-12 pt-8 border-t border-border/30 dark:border-white/10">
+                    <div className="text-center text-xs text-muted-foreground/50 font-mono">
+                        TruthLens v3.0 • Hybrid Pipeline Architecture
+                    </div>
+                </footer>
             </div>
         </div>
     );
