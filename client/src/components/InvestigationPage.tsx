@@ -1,11 +1,15 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Search, CheckCircle2, XCircle, AlertTriangle,
+    CheckCircle2, XCircle, AlertTriangle,
     Globe, Database, FileSearch, Brain, Shield, Zap,
     ExternalLink, AlertCircle, Loader2, RotateCcw, Lightbulb,
-    ChevronRight
+    ChevronRight, BarChart3, Link as LinkIcon
 } from 'lucide-react';
+import {
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
+    Cell, PieChart, Pie
+} from 'recharts';
 import type { V3InvestigateResponse, V3VerifiedClaim, V3EvidenceItem } from '../lib/api';
 import { investigateClaim } from '../lib/api';
 
@@ -44,9 +48,8 @@ const SOURCE_ICONS: Record<string, string> = {
     'web_search': '🌐',
 };
 
-// === Styled Components ===
+// === Helper Components ===
 
-// Gradient text component
 function GradientText({ children, className = '' }: { children: React.ReactNode; className?: string }) {
     return (
         <span
@@ -64,7 +67,6 @@ function GradientText({ children, className = '' }: { children: React.ReactNode;
     );
 }
 
-// Glass card component
 function GlassCard({ children, className = '', glow = false }: {
     children: React.ReactNode;
     className?: string;
@@ -84,7 +86,6 @@ function GlassCard({ children, className = '', glow = false }: {
     );
 }
 
-// Numbered step indicator (supermemory style)
 function StepIndicator({
     step,
     isActive,
@@ -96,8 +97,6 @@ function StepIndicator({
     isComplete: boolean;
     isPending: boolean;
 }) {
-    const Icon = step.icon;
-
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -143,7 +142,6 @@ function StepIndicator({
                     </span>
                 )}
 
-                {/* Active pulse ring */}
                 {isActive && (
                     <motion.div
                         className="absolute inset-0 rounded-full"
@@ -154,7 +152,6 @@ function StepIndicator({
                 )}
             </div>
 
-            {/* Label */}
             <div className="text-center">
                 <div
                     className="text-sm font-medium"
@@ -175,23 +172,6 @@ function StepIndicator({
     );
 }
 
-// Connection line between steps
-function StepConnector({ isComplete }: { isComplete: boolean }) {
-    return (
-        <div
-            className="flex-1 h-0.5 mx-2 rounded-full transition-all duration-500"
-            style={{
-                background: isComplete
-                    ? 'linear-gradient(90deg, #10b981, #06b6d4)'
-                    : 'rgba(255, 255, 255, 0.1)',
-                minWidth: '20px',
-                maxWidth: '60px',
-            }}
-        />
-    );
-}
-
-// Evidence card
 function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: number }) {
     const stanceStyles = {
         supports: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', text: '#10b981', label: '✓ Supports' },
@@ -212,11 +192,10 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
                 border: '1px solid rgba(255, 255, 255, 0.06)',
             }}
         >
-            {/* Header */}
             <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                     <span className="text-xl">{icon}</span>
-                    <span className="font-medium text-white">{evidence.source_domain}</span>
+                    <span className="font-medium text-white truncate max-w-[200px]">{evidence.source_domain}</span>
                 </div>
                 <span
                     className="px-2.5 py-1 rounded-full text-xs font-medium"
@@ -226,22 +205,32 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
                 </span>
             </div>
 
-            {/* Content */}
-            <p className="text-sm leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <p className="text-sm leading-relaxed mb-3 line-clamp-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
                 {evidence.text_preview}
             </p>
 
-            {/* Footer */}
             <div className="flex items-center justify-between text-xs">
-                <span style={{ color: evidence.trust_score >= 80 ? '#10b981' : evidence.trust_score >= 50 ? '#f59e0b' : '#ef4444' }}>
-                    Trust: {evidence.trust_score}%
-                </span>
+                <div className="flex items-center gap-2">
+                    <span style={{ color: evidence.trust_score >= 80 ? '#10b981' : evidence.trust_score >= 50 ? '#f59e0b' : '#ef4444' }}>
+                        Trust: {evidence.trust_score}%
+                    </span>
+                    <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+                        <div
+                            className="h-full rounded-full"
+                            style={{
+                                width: `${evidence.trust_score}%`,
+                                background: evidence.trust_score >= 80 ? '#10b981' : evidence.trust_score >= 50 ? '#f59e0b' : '#ef4444'
+                            }}
+                        />
+                    </div>
+                </div>
+
                 {evidence.source_url && (
                     <a
                         href={evidence.source_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 hover:opacity-80"
+                        className="flex items-center gap-1 hover:opacity-80 transition-opacity"
                         style={{ color: '#06b6d4' }}
                     >
                         View <ExternalLink className="w-3 h-3" />
@@ -249,6 +238,105 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
                 )}
             </div>
         </motion.div>
+    );
+}
+
+function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
+    // Aggregate trust scores
+    const trustData = useMemo(() => {
+        return evidence.map((e, i) => ({
+            name: e.source_domain,
+            trust: e.trust_score,
+            stance: e.stance
+        })).sort((a, b) => b.trust - a.trust).slice(0, 8); // Top 8 sources
+    }, [evidence]);
+
+    // Stance distribution
+    const stanceData = useMemo(() => {
+        const counts = { supports: 0, refutes: 0, neutral: 0 };
+        evidence.forEach(e => {
+            if (counts[e.stance] !== undefined) counts[e.stance]++;
+        });
+        return [
+            { name: 'Supports', value: counts.supports, color: '#10b981' },
+            { name: 'Refutes', value: counts.refutes, color: '#ef4444' },
+            { name: 'Neutral', value: counts.neutral, color: '#9ca3af' }
+        ].filter(d => d.value > 0);
+    }, [evidence]);
+
+    if (evidence.length === 0) return null;
+
+    return (
+        <div className="grid md:grid-cols-2 gap-6 mb-8">
+            <GlassCard className="p-6">
+                <div className="flex items-center gap-2 mb-6">
+                    <BarChart3 className="w-5 h-5" style={{ color: '#06b6d4' }} />
+                    <h3 className="font-medium text-white">Source Reliability</h3>
+                </div>
+                <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={trustData} layout="vertical" margin={{ left: 0, right: 30, top: 0, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
+                            <XAxis type="number" domain={[0, 100]} hide />
+                            <YAxis
+                                type="category"
+                                dataKey="name"
+                                width={120}
+                                tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+                                axisLine={false}
+                                tickLine={false}
+                            />
+                            <Bar dataKey="trust" radius={[0, 4, 4, 0]} barSize={20}>
+                                {trustData.map((entry, index) => (
+                                    <Cell
+                                        key={`cell-${index}`}
+                                        fill={entry.trust >= 80 ? '#10b981' : entry.trust >= 50 ? '#f59e0b' : '#ef4444'}
+                                        fillOpacity={0.8}
+                                    />
+                                ))}
+                            </Bar>
+                        </BarChart>
+                    </ResponsiveContainer>
+                </div>
+            </GlassCard>
+
+            <GlassCard className="p-6">
+                <div className="flex items-center gap-2 mb-6">
+                    <Brain className="w-5 h-5" style={{ color: '#06b6d4' }} />
+                    <h3 className="font-medium text-white">Stance Distribution</h3>
+                </div>
+                <div className="h-[200px] flex items-center justify-center">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                            <Pie
+                                data={stanceData}
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                            >
+                                {stanceData.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                ))}
+                            </Pie>
+                        </PieChart>
+                    </ResponsiveContainer>
+                    {/* Center Label */}
+                    <div className="absolute text-center">
+                        <div className="text-2xl font-bold text-white">{evidence.length}</div>
+                        <div className="text-xs text-white/50">Sources</div>
+                    </div>
+                </div>
+                <div className="flex justify-center gap-4 mt-2">
+                    {stanceData.map(d => (
+                        <div key={d.name} className="flex items-center gap-2 text-xs">
+                            <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
+                            <span style={{ color: 'rgba(255,255,255,0.6)' }}>{d.name} ({d.value})</span>
+                        </div>
+                    ))}
+                </div>
+            </GlassCard>
+        </div>
     );
 }
 
@@ -298,134 +386,76 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
             transition={{ type: "spring", damping: 20 }}
         >
             <GlassCard className="p-8" glow>
-                {/* Verdict label */}
-                <div
-                    className="text-xs font-medium tracking-widest mb-4"
-                    style={{ color: 'rgba(255,255,255,0.4)' }}
-                >
-                    VERDICT
-                </div>
-
-                {/* Main verdict */}
-                <div className="flex items-center gap-4 mb-6">
-                    <div
-                        className="w-16 h-16 rounded-2xl flex items-center justify-center"
-                        style={{ background: v.gradient }}
-                    >
-                        <Icon className="w-8 h-8 text-white" />
-                    </div>
-                    <div>
+                <div className="flex flex-col md:flex-row gap-8 items-start">
+                    {/* Main Verdict Info */}
+                    <div className="flex-1">
                         <div
-                            className="text-3xl font-bold"
-                            style={{
-                                background: v.gradient,
-                                WebkitBackgroundClip: 'text',
-                                WebkitTextFillColor: 'transparent',
-                            }}
+                            className="text-xs font-medium tracking-widest mb-4"
+                            style={{ color: 'rgba(255,255,255,0.4)' }}
                         >
-                            {v.label}
+                            VERDICT ANALYSIS
                         </div>
-                    </div>
-                </div>
 
-                {/* Confidence bar */}
-                <div className="mb-6">
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                            Evidence Confidence
-                        </span>
-                        <span className="text-sm font-semibold" style={{ color: '#06b6d4' }}>
-                            {confidence}%
-                        </span>
-                    </div>
-                    <div
-                        className="h-2 rounded-full overflow-hidden"
-                        style={{ background: 'rgba(255,255,255,0.1)' }}
-                    >
-                        <motion.div
-                            initial={{ width: 0 }}
-                            animate={{ width: `${confidence}%` }}
-                            transition={{ duration: 1, ease: "easeOut" }}
-                            className="h-full rounded-full"
-                            style={{ background: v.gradient }}
-                        />
-                    </div>
-                    <p className="text-xs mt-2 italic" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                        Based on evidence consistency, not absolute truth
-                    </p>
-                </div>
+                        <div className="flex items-center gap-4 mb-6">
+                            <div
+                                className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0"
+                                style={{ background: v.gradient }}
+                            >
+                                <Icon className="w-8 h-8 text-white" />
+                            </div>
+                            <div>
+                                <div
+                                    className="text-3xl md:text-4xl font-bold"
+                                    style={{
+                                        background: v.gradient,
+                                        WebkitBackgroundClip: 'text',
+                                        WebkitTextFillColor: 'transparent',
+                                    }}
+                                >
+                                    {v.label}
+                                </div>
+                            </div>
+                        </div>
 
-                {/* Summary */}
-                <p className="text-base leading-relaxed mb-6" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                    {claim.evidence_summary}
-                </p>
+                        <div className="mb-6">
+                            <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>Evidence Confidence</span>
+                                <span className="text-sm font-semibold" style={{ color: '#06b6d4' }}>{confidence}%</span>
+                            </div>
+                            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${confidence}%` }}
+                                    transition={{ duration: 1, ease: "easeOut" }}
+                                    className="h-full rounded-full"
+                                    style={{ background: v.gradient }}
+                                />
+                            </div>
+                        </div>
 
-                {/* Stats */}
-                <div className="flex gap-4">
-                    <div
-                        className="px-4 py-2 rounded-lg"
-                        style={{ background: 'rgba(255,255,255,0.05)' }}
-                    >
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{claim.sources_checked} sources</span>
+                        <p className="text-lg leading-relaxed text-white/80">
+                            {claim.evidence_summary}
+                        </p>
                     </div>
-                    <div
-                        className="px-4 py-2 rounded-lg"
-                        style={{ background: 'rgba(255,255,255,0.05)' }}
-                    >
-                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{claim.investigation_time_ms}ms</span>
+
+                    {/* Quick Stats */}
+                    <div className="w-full md:w-64 space-y-3">
+                        <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                            <div className="text-xs text-white/40 mb-1">Sources Checked</div>
+                            <div className="text-2xl font-bold text-white">{claim.sources_checked}</div>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                            <div className="text-xs text-white/40 mb-1">Response Time</div>
+                            <div className="text-2xl font-bold text-white">{claim.investigation_time_ms}ms</div>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-4 border border-white/5">
+                            <div className="text-xs text-white/40 mb-1">Claim Type</div>
+                            <div className="text-lg font-medium text-white capitalize">{claim.claim_type.replace('_', ' ')}</div>
+                        </div>
                     </div>
                 </div>
             </GlassCard>
         </motion.div>
-    );
-}
-
-// Not checkable education
-function NotCheckableEducation({ claimType, text }: { claimType: string; text: string }) {
-    const info: Record<string, { icon: string; title: string; desc: string; tip: string }> = {
-        opinion: {
-            icon: '💭',
-            title: 'This is an Opinion',
-            desc: 'Opinions express personal beliefs and cannot be objectively verified.',
-            tip: 'Try rephrasing as a factual claim with measurable criteria.'
-        },
-        prediction: {
-            icon: '🔮',
-            title: 'This is a Prediction',
-            desc: 'Future events cannot be verified until they occur.',
-            tip: 'Check back after the predicted date, or search for expert forecasts.'
-        },
-        question: {
-            icon: '❓',
-            title: 'This is a Question',
-            desc: 'Questions seek information rather than making claims.',
-            tip: 'Convert your question to a statement to fact-check it.'
-        },
-    };
-    const i = info[claimType] || { icon: '🔍', title: 'Unable to Verify', desc: 'This statement cannot be fact-checked.', tip: 'Try simplifying or rephrasing.' };
-
-    return (
-        <GlassCard className="p-8">
-            <div className="text-4xl mb-4">{i.icon}</div>
-            <h3 className="text-2xl font-semibold text-white mb-3">{i.title}</h3>
-            <p className="text-base mb-6" style={{ color: 'rgba(255,255,255,0.6)' }}>{i.desc}</p>
-
-            <div
-                className="p-4 rounded-xl flex gap-3"
-                style={{ background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.2)' }}
-            >
-                <Lightbulb className="w-5 h-5 flex-shrink-0" style={{ color: '#06b6d4' }} />
-                <div>
-                    <span className="text-sm font-medium" style={{ color: '#06b6d4' }}>Tip:</span>
-                    <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{i.tip}</p>
-                </div>
-            </div>
-
-            <div className="mt-6 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)' }}>
-                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Your input:</span>
-                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>"{text}"</p>
-            </div>
-        </GlassCard>
     );
 }
 
@@ -438,6 +468,12 @@ export function InvestigationPage() {
     const [primaryClaim, setPrimaryClaim] = useState<V3VerifiedClaim | null>(null);
     const [error, setError] = useState<string | null>(null);
 
+    // Auto-detect URL
+    const isUrl = useMemo(() => {
+        const trimmed = inputText.trim();
+        return trimmed.startsWith('http://') || trimmed.startsWith('https://');
+    }, [inputText]);
+
     const runInvestigation = useCallback(async () => {
         if (!inputText.trim()) return;
 
@@ -446,7 +482,9 @@ export function InvestigationPage() {
         setPrimaryClaim(null);
         setCompletedSteps([]);
 
-        const apiPromise = investigateClaim(inputText);
+        // Determine input type
+        const inputType = isUrl ? 'url' : 'text';
+        const apiPromise = investigateClaim(inputText, inputType);
 
         // Animate through steps
         for (const step of STEPS) {
@@ -464,7 +502,7 @@ export function InvestigationPage() {
             setError(err instanceof Error ? err.message : 'Investigation failed');
             setCurrentStep('error');
         }
-    }, [inputText]);
+    }, [inputText, isUrl]);
 
     const handleReset = () => {
         setInputText('');
@@ -492,7 +530,7 @@ export function InvestigationPage() {
                 />
             </div>
 
-            <div className="relative z-10 max-w-5xl mx-auto">
+            <div className="relative z-10 max-w-6xl mx-auto">
                 {/* Hero Header */}
                 <motion.div
                     initial={{ opacity: 0, y: -30 }}
@@ -503,7 +541,7 @@ export function InvestigationPage() {
                         <GradientText>TruthLens Investigation</GradientText>
                     </h1>
                     <p className="text-lg" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                        Watch the verification process unfold in real-time
+                        Comprehensive claim verification and article analysis
                     </p>
                 </motion.div>
 
@@ -517,16 +555,30 @@ export function InvestigationPage() {
                             className="mb-16"
                         >
                             <GlassCard className="p-8 max-w-3xl mx-auto">
-                                <label
-                                    className="block text-sm font-medium mb-4"
-                                    style={{ color: 'rgba(255,255,255,0.6)' }}
-                                >
-                                    Enter a claim to investigate
-                                </label>
+                                <div className="flex justify-between items-center mb-4">
+                                    <label
+                                        className="block text-sm font-medium"
+                                        style={{ color: 'rgba(255,255,255,0.6)' }}
+                                    >
+                                        Enter a claim or article URL
+                                    </label>
+                                    {isUrl && (
+                                        <motion.div
+                                            initial={{ opacity: 0, x: 10 }}
+                                            animate={{ opacity: 1, x: 0 }}
+                                            className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs border border-blue-500/20 flex items-center gap-1"
+                                        >
+                                            <LinkIcon className="w-3 h-3" />
+                                            URL Detected
+                                        </motion.div>
+                                    )}
+                                </div>
                                 <textarea
                                     value={inputText}
                                     onChange={(e) => setInputText(e.target.value)}
-                                    placeholder="e.g., 'COVID vaccines cause autism' or 'The Earth is flat'"
+                                    placeholder="Examples:
+- 'COVID vaccines cause autism'
+- https://example.com/news/article"
                                     className="w-full h-32 px-5 py-4 rounded-xl resize-none text-white text-lg focus:outline-none transition-all"
                                     style={{
                                         background: 'rgba(255,255,255,0.03)',
@@ -548,7 +600,7 @@ export function InvestigationPage() {
                                     }}
                                 >
                                     <Zap className="w-5 h-5" />
-                                    Start Investigation
+                                    {isUrl ? 'Analyze Article' : 'Start Investigation'}
                                     <ChevronRight className="w-5 h-5" />
                                 </button>
                             </GlassCard>
@@ -563,26 +615,17 @@ export function InvestigationPage() {
                         animate={{ opacity: 1, y: 0 }}
                         className="mb-12"
                     >
+                        {/* Connection Lines (Behind) */}
                         <div className="flex items-center justify-center flex-wrap gap-2">
-                            {STEPS.map((step, i) => (
-                                <div key={step.id} className="flex items-center">
-                                    <StepIndicator
-                                        step={step}
-                                        isActive={currentStep === step.id}
-                                        isComplete={completedSteps.includes(step.id)}
-                                        isPending={!completedSteps.includes(step.id) && currentStep !== step.id}
-                                    />
-                                    {i < STEPS.length - 1 && (
-                                        <StepConnector isComplete={completedSteps.includes(STEPS[i + 1].id)} />
-                                    )}
-                                </div>
+                            {STEPS.map((step) => (
+                                <StepIndicator
+                                    key={step.id}
+                                    step={step}
+                                    isActive={currentStep === step.id}
+                                    isComplete={completedSteps.includes(step.id)}
+                                    isPending={!completedSteps.includes(step.id) && currentStep !== step.id}
+                                />
                             ))}
-                        </div>
-
-                        {/* Current claim being investigated */}
-                        <div className="mt-8 text-center">
-                            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Investigating:</span>
-                            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>"{inputText}"</p>
                         </div>
                     </motion.div>
                 )}
@@ -599,7 +642,7 @@ export function InvestigationPage() {
                         >
                             <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full" style={{ background: 'rgba(6, 182, 212, 0.1)' }}>
                                 <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#06b6d4' }} />
-                                <span style={{ color: '#06b6d4' }}>Gathering evidence...</span>
+                                <span style={{ color: '#06b6d4' }}>Analyzing content and gathering evidence...</span>
                             </div>
                         </motion.div>
                     )}
@@ -615,12 +658,12 @@ export function InvestigationPage() {
                                 <h3 className="text-xl font-semibold mb-2" style={{ color: '#ef4444' }}>Investigation Failed</h3>
                                 <p className="mb-6" style={{ color: 'rgba(255,255,255,0.6)' }}>{error}</p>
                                 <button
-                                    onClick={runInvestigation}
+                                    onClick={handleReset}
                                     className="px-6 py-3 rounded-xl font-medium"
                                     style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
                                 >
                                     <RotateCcw className="w-4 h-4 inline mr-2" />
-                                    Retry
+                                    Try Again
                                 </button>
                             </GlassCard>
                         </motion.div>
@@ -645,21 +688,19 @@ export function InvestigationPage() {
                                 </button>
                             </div>
 
-                            {/* Verdict or Not Checkable */}
-                            {primaryClaim.verdict === 'not_checkable' ? (
-                                <NotCheckableEducation
-                                    claimType={primaryClaim.claim_type}
-                                    text={primaryClaim.original_text}
-                                />
-                            ) : (
-                                <VerdictDisplay claim={primaryClaim} />
+                            {/* Verdict */}
+                            <VerdictDisplay claim={primaryClaim} />
+
+                            {/* Deep Analysis Charts */}
+                            {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
+                                <AnalysisCharts evidence={primaryClaim.evidence} />
                             )}
 
                             {/* Evidence cards */}
                             {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
                                 <div>
                                     <h2 className="text-xl font-semibold mb-6" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                                        Evidence Found
+                                        Detailed Evidence
                                     </h2>
                                     <div className="grid md:grid-cols-2 gap-4">
                                         {primaryClaim.evidence.map((ev, i) => (
