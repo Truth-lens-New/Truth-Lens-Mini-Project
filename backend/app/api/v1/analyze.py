@@ -5,7 +5,7 @@ Main analysis endpoint that orchestrates the full verification pipeline.
 """
 
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +23,7 @@ from app.services import (
     aggregate_verdict,
     generate_explanation,
     llm_assess_claim,
+    analyze_image_for_deepfake,
 )
 
 
@@ -286,3 +287,69 @@ async def analyze_claim(
         ),
         explanation=explanation
     )
+
+# Media Analysis Response Schema
+class MediaAnalysisResponse(BaseModel):
+    """Response for media (image/video) analysis."""
+    verdict: str = Field(..., description="FAKE or REAL")
+    confidence: float = Field(..., description="Confidence percentage (0-100)")
+    confidence_level: str = Field(..., description="high, medium, or low")
+    real_probability: float = Field(..., description="Probability of being real (0-100)")
+    fake_probability: float = Field(..., description="Probability of being fake (0-100)")
+    model: str = Field(..., description="Model used for detection")
+    metadata: dict = Field(default={}, description="Image metadata (EXIF, format, etc.)")
+    evidence: list = Field(default=[], description="Evidence points supporting the verdict")
+    heatmap: Optional[str] = Field(default=None, description="Base64 encoded Grad-CAM heatmap")
+
+
+@router.post("/analyze-media", response_model=MediaAnalysisResponse)
+async def analyze_media(
+    file: UploadFile = File(..., description="Image file to analyze"),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Analyze an uploaded image for deepfake detection.
+    
+    Uses EfficientNet-B0 model trained on deepfake datasets.
+    
+    Args:
+        file: Image file (JPEG, PNG, etc.)
+        current_user: Authenticated user from JWT
+        
+    Returns:
+        MediaAnalysisResponse with verdict and confidence scores
+    """
+    # Validate file type
+    allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
+    if file.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
+        )
+    
+    # Read file contents
+    try:
+        contents = await file.read()
+        
+        # Check file size (max 10MB)
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File too large. Maximum size is 10MB."
+            )
+        
+        # Run deepfake detection
+        result = await analyze_image_for_deepfake(contents)
+        
+        return MediaAnalysisResponse(**result)
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Analysis failed: {str(e)}"
+        )

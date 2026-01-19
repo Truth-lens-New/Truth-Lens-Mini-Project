@@ -11,7 +11,7 @@ interface NavigationProps {
   onLogout?: () => void;
 }
 
-const comingSoonPages: Page[] = ['verify-media', 'projects', 'organization'];
+const comingSoonPages: Page[] = ['projects', 'organization'];
 
 export function Navigation({ currentPage, onNavigate, userMode, onModeChange, userEmail, onLogout }: NavigationProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -42,10 +42,10 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                   key={item.page}
                   onClick={() => onNavigate(item.page)}
                   className={`px-3 py-2 text-sm rounded-lg transition-colors ${currentPage === item.page
-                      ? 'text-white bg-white/10'
-                      : isSoon
-                        ? 'text-gray-500 hover:text-gray-400'
-                        : 'text-gray-400 hover:text-white'
+                    ? 'text-white bg-white/10'
+                    : isSoon
+                      ? 'text-gray-500 hover:text-gray-400'
+                      : 'text-gray-400 hover:text-white'
                     }`}
                 >
                   {item.label}
@@ -66,10 +66,10 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                   onClick={() => !isLocked && onModeChange(mode)}
                   disabled={isLocked}
                   className={`px-3 py-1.5 rounded-md text-xs flex items-center gap-1 ${userMode === mode && !isLocked
-                      ? 'bg-[#00FFC3] text-black'
-                      : isLocked
-                        ? 'text-gray-600 cursor-not-allowed'
-                        : 'text-gray-400 hover:text-white'
+                    ? 'bg-[#00FFC3] text-black'
+                    : isLocked
+                      ? 'text-gray-600 cursor-not-allowed'
+                      : 'text-gray-400 hover:text-white'
                     }`}
                 >
                   {mode}
