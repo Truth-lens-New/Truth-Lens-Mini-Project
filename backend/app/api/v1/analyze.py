@@ -305,7 +305,8 @@ class MediaAnalysisResponse(BaseModel):
 @router.post("/analyze-media", response_model=MediaAnalysisResponse)
 async def analyze_media(
     file: UploadFile = File(..., description="Image file to analyze"),
-    current_user: dict = Depends(get_current_user)
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
 ):
     """
     Analyze an uploaded image for deepfake detection.
@@ -341,6 +342,24 @@ async def analyze_media(
         # Run deepfake detection
         result = await analyze_image_for_deepfake(contents)
         
+        # Save to history
+        try:
+            check = Check(
+                user_id=current_user["user_id"],
+                input_text=f"Media Analysis: {file.filename}",
+                claim=f"Deepfake Analysis: {file.filename}",
+                verdict=result["verdict"],
+                confidence=result["confidence_level"],
+                explanation="\n".join(result.get("evidence", []))[:4000] if result.get("evidence") else "No evidence provided",
+                stance_summary=result, # Storing full result JSON including heatmap
+                pipeline_version="deepfake-v1"
+            )
+            db.add(check)
+            await db.commit()
+        except Exception as e:
+            print(f"Failed to save history: {e}")
+            # Don't fail the request just because history save failed
+            
         return MediaAnalysisResponse(**result)
         
     except ValueError as e:
