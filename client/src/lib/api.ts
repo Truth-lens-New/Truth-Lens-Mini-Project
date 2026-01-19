@@ -164,16 +164,16 @@ export interface V3InvestigateRequest {
 }
 
 export interface V3EvidenceItem {
-    text: string;
-    source_url: string;
+    text_preview: string;
+    source_url?: string;
     source_domain: string;
-    source_type: 'fact_check' | 'wikidata' | 'wikipedia' | 'news_article' | 'academic_paper' | 'known_misinfo' | 'web_search' | 'archive' | 'social_media';
+    source_type: string;
     stance: 'supports' | 'refutes' | 'neutral';
-    stance_confidence: number;
+    stance_confidence?: number;
     trust_score: number;
 }
 
-export interface V3InvestigateResponse {
+export interface V3VerifiedClaim {
     original_text: string;
     claim_type: string;
     verdict: 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable';
@@ -182,8 +182,19 @@ export interface V3InvestigateResponse {
     evidence_count: number;
     sources_checked: number;
     investigation_time_ms: number;
-    verified_at: string;
     evidence: V3EvidenceItem[];
+}
+
+export interface V3InvestigateResponse {
+    success: boolean;
+    verified_claims: V3VerifiedClaim[];
+    metadata: {
+        input_type: string;
+        total_processing_time_ms: number;
+        claims_found: number;
+        claims_verified: number;
+        investigated_at: string;
+    };
 }
 
 export interface V3AnalyzeResponse {
@@ -230,12 +241,19 @@ export async function investigateClaim(text: string): Promise<V3InvestigateRespo
     const response = await fetch(`${API_URL}/api/v3/investigate`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ content: text }),
     });
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Investigation failed');
+        // Handle Pydantic validation errors (array of objects) and string errors
+        let errorMessage = 'Investigation failed';
+        if (Array.isArray(errorData.detail)) {
+            errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ');
+        } else if (typeof errorData.detail === 'string') {
+            errorMessage = errorData.detail;
+        }
+        throw new Error(errorMessage);
     }
 
     return response.json();

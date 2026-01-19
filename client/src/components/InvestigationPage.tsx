@@ -6,7 +6,7 @@ import {
     ExternalLink, Shield, AlertCircle, Loader2, RotateCcw, Info,
     BookOpen, Lightbulb
 } from 'lucide-react';
-import type { V3InvestigateResponse, V3EvidenceItem } from '../lib/api';
+import type { V3InvestigateResponse, V3VerifiedClaim, V3EvidenceItem } from '../lib/api';
 import { investigateClaim } from '../lib/api';
 
 // === Types ===
@@ -274,7 +274,7 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
 
             {/* Content */}
             <p className="text-sm text-white/70 mb-3 line-clamp-2">
-                {evidence.text}
+                {evidence.text_preview}
             </p>
 
             {/* Footer */}
@@ -405,6 +405,7 @@ export function InvestigationPage() {
     const [expandedStep, setExpandedStep] = useState<InvestigationStep | null>(null);
     const [stepDetails, setStepDetails] = useState<Record<InvestigationStep, string>>({} as any);
     const [result, setResult] = useState<V3InvestigateResponse | null>(null);
+    const [primaryClaim, setPrimaryClaim] = useState<V3VerifiedClaim | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     // Simulate staged investigation (Senior feedback: artificial delays)
@@ -413,6 +414,7 @@ export function InvestigationPage() {
 
         setError(null);
         setResult(null);
+        setPrimaryClaim(null);
         setCompletedSteps([]);
         setStepDetails({} as any);
 
@@ -435,15 +437,21 @@ export function InvestigationPage() {
         try {
             const response = await apiPromise;
             setResult(response);
+
+            // Extract primary claim from verified_claims array
+            const claim = response.verified_claims?.[0] || null;
+            setPrimaryClaim(claim);
             setCurrentStep('complete');
 
             // Update step details with actual results
-            setStepDetails(prev => ({
-                ...prev,
-                extracting: `Detected claim type: ${response.claim_type}`,
-                searching_web: `Found ${response.evidence_count} sources`,
-                synthesizing: `Verdict: ${response.verdict} (${Math.round(response.confidence * 100)}% confidence)`,
-            }));
+            if (claim) {
+                setStepDetails(prev => ({
+                    ...prev,
+                    extracting: `Detected claim type: ${claim.claim_type}`,
+                    searching_web: `Found ${claim.evidence_count} sources`,
+                    synthesizing: `Verdict: ${claim.verdict} (${Math.round(claim.confidence * 100)}% confidence)`,
+                }));
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Investigation failed');
             setCurrentStep('error');
@@ -457,6 +465,7 @@ export function InvestigationPage() {
         setExpandedStep(null);
         setStepDetails({} as any);
         setResult(null);
+        setPrimaryClaim(null);
         setError(null);
     };
 
@@ -597,23 +606,23 @@ export function InvestigationPage() {
                             )}
 
                             {/* Results */}
-                            {result && currentStep === 'complete' && (
+                            {primaryClaim && currentStep === 'complete' && (
                                 <motion.div
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     className="space-y-4"
                                 >
                                     {/* Not checkable - Educational display */}
-                                    {result.verdict === 'not_checkable' ? (
+                                    {primaryClaim.verdict === 'not_checkable' ? (
                                         <NotCheckableDisplay
-                                            claimType={result.claim_type}
-                                            text={result.original_text}
+                                            claimType={primaryClaim.claim_type}
+                                            text={primaryClaim.original_text}
                                         />
                                     ) : (
                                         <>
                                             {/* Verdict Card (intensity tied to confidence) */}
                                             {(() => {
-                                                const style = getVerdictStyle(result.verdict as VerdictType, result.confidence);
+                                                const style = getVerdictStyle(primaryClaim.verdict as VerdictType, primaryClaim.confidence);
                                                 const Icon = style.icon;
                                                 return (
                                                     <motion.div
@@ -635,26 +644,26 @@ export function InvestigationPage() {
                                                         </div>
 
                                                         <ConfidenceMeter
-                                                            confidence={result.confidence}
-                                                            verdict={result.verdict as VerdictType}
+                                                            confidence={primaryClaim.confidence}
+                                                            verdict={primaryClaim.verdict as VerdictType}
                                                         />
 
-                                                        <p className="mt-4 text-white/70">{result.evidence_summary}</p>
+                                                        <p className="mt-4 text-white/70">{primaryClaim.evidence_summary}</p>
 
                                                         <div className="mt-4 flex gap-4 text-xs text-white/50">
-                                                            <span>{result.sources_checked} sources checked</span>
-                                                            <span>{result.investigation_time_ms}ms</span>
+                                                            <span>{primaryClaim.sources_checked} sources checked</span>
+                                                            <span>{primaryClaim.investigation_time_ms}ms</span>
                                                         </div>
                                                     </motion.div>
                                                 );
                                             })()}
 
                                             {/* Evidence Cards */}
-                                            {result.evidence && result.evidence.length > 0 && (
+                                            {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
                                                 <div>
                                                     <h3 className="text-lg font-medium mb-3">Evidence Found</h3>
                                                     <div className="space-y-3">
-                                                        {result.evidence.map((ev, i) => (
+                                                        {primaryClaim.evidence.map((ev: V3EvidenceItem, i: number) => (
                                                             <EvidenceCard key={i} evidence={ev} index={i} />
                                                         ))}
                                                     </div>
