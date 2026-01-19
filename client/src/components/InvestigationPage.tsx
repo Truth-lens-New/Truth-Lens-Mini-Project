@@ -1,10 +1,10 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-    Search, CheckCircle2, XCircle, AlertTriangle, Clock,
-    Database, Globe, FileSearch, Brain, ChevronDown, ChevronUp,
-    ExternalLink, Shield, AlertCircle, Loader2, RotateCcw, Info,
-    BookOpen, Lightbulb
+    Search, CheckCircle2, XCircle, AlertTriangle,
+    Globe, Database, FileSearch, Brain, Shield, Zap,
+    ExternalLink, AlertCircle, Loader2, RotateCcw, Lightbulb,
+    ChevronRight
 } from 'lucide-react';
 import type { V3InvestigateResponse, V3VerifiedClaim, V3EvidenceItem } from '../lib/api';
 import { investigateClaim } from '../lib/api';
@@ -23,25 +23,17 @@ type InvestigationStep =
 
 type VerdictType = 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable';
 
-interface TimelineStepData {
-    id: InvestigationStep;
-    label: string;
-    honestLabel: string;  // Senior feedback: honest language
-    icon: React.ElementType;
-    duration: number;  // Minimum display time in ms
-}
-
 // === Constants ===
-const TIMELINE_STEPS: TimelineStepData[] = [
-    { id: 'extracting', label: 'Extracting Claims', honestLabel: 'Analyzing text for verifiable claims...', icon: FileSearch, duration: 800 },
-    { id: 'checking_misinfo', label: 'Known Records', honestLabel: 'Scanning prior verifications (if available)', icon: Database, duration: 1000 },
-    { id: 'checking_wikidata', label: 'Fact Database', honestLabel: 'Checking structured knowledge sources', icon: BookOpen, duration: 1000 },
-    { id: 'searching_web', label: 'Web Evidence', honestLabel: 'Searching available online sources...', icon: Globe, duration: 1200 },
-    { id: 'analyzing_stance', label: 'Stance Analysis', honestLabel: 'Analyzing evidence consistency...', icon: Brain, duration: 1000 },
-    { id: 'synthesizing', label: 'Verdict Synthesis', honestLabel: 'Weighing evidence to determine verdict', icon: Shield, duration: 800 },
-];
+const STEPS = [
+    { id: 'extracting', num: 1, label: 'Extract', desc: 'Analyzing claims', icon: FileSearch, duration: 800 },
+    { id: 'checking_misinfo', num: 2, label: 'Records', desc: 'Known facts', icon: Database, duration: 1000 },
+    { id: 'checking_wikidata', num: 3, label: 'Facts', desc: 'Databases', icon: Shield, duration: 1000 },
+    { id: 'searching_web', num: 4, label: 'Search', desc: 'Web sources', icon: Globe, duration: 1200 },
+    { id: 'analyzing_stance', num: 5, label: 'Analyze', desc: 'Stance detection', icon: Brain, duration: 1000 },
+    { id: 'synthesizing', num: 6, label: 'Verdict', desc: 'Synthesizing', icon: Zap, duration: 800 },
+] as const;
 
-// Source type icons (Senior feedback)
+// Source icons
 const SOURCE_ICONS: Record<string, string> = {
     'known_misinfo': '🚨',
     'wikidata': '📊',
@@ -50,249 +42,207 @@ const SOURCE_ICONS: Record<string, string> = {
     'news_article': '📰',
     'academic_paper': '🔬',
     'web_search': '🌐',
-    'archive': '📁',
-    'social_media': '💬',
 };
 
-const SOURCE_LABELS: Record<string, string> = {
-    'known_misinfo': 'Verified Database',
-    'wikidata': 'Structured Data',
-    'wikipedia': 'Encyclopedia',
-    'fact_check': 'Fact-Check',
-    'news_article': 'News',
-    'academic_paper': 'Academic',
-    'web_search': 'Web Source',
-    'archive': 'Archive',
-    'social_media': 'Social',
-};
+// === Styled Components ===
 
-// Verdict styling based on confidence (Senior feedback: tie intensity to confidence)
-const getVerdictStyle = (verdict: VerdictType, confidence: number) => {
-    const isHighConfidence = confidence >= 0.7;
-    const isMedConfidence = confidence >= 0.4;
-
-    switch (verdict) {
-        case 'verified_true':
-            return {
-                bg: isHighConfidence ? 'bg-emerald-500/20' : 'bg-emerald-500/10',
-                border: isHighConfidence ? 'border-emerald-400' : 'border-emerald-500/50',
-                text: 'text-emerald-400',
-                icon: CheckCircle2,
-                label: 'Verified True',
-                glow: isHighConfidence ? 'shadow-[0_0_30px_rgba(16,185,129,0.3)]' : '',
-            };
-        case 'verified_false':
-            return {
-                bg: isHighConfidence ? 'bg-red-500/20' : 'bg-red-500/10',
-                border: isHighConfidence ? 'border-red-400' : 'border-red-500/50',
-                text: 'text-red-400',
-                icon: XCircle,
-                label: 'Verified False',
-                glow: isHighConfidence ? 'shadow-[0_0_30px_rgba(239,68,68,0.3)]' : '',
-            };
-        case 'disputed':
-            return {
-                bg: 'bg-amber-500/15',
-                border: 'border-amber-500/50',
-                text: 'text-amber-400',
-                icon: AlertTriangle,
-                label: 'Disputed',
-                glow: '',
-            };
-        case 'not_checkable':
-            return {
-                bg: 'bg-slate-500/15',
-                border: 'border-slate-500/50',
-                text: 'text-slate-400',
-                icon: Info,
-                label: 'Not Fact-Checkable',
-                glow: '',
-            };
-        case 'insufficient_evidence':
-            return {
-                bg: 'bg-yellow-500/10',
-                border: 'border-yellow-500/50',
-                text: 'text-yellow-400',
-                icon: AlertCircle,
-                label: 'Insufficient Evidence',
-                glow: '',
-            };
-        default: // unverified
-            return {
-                bg: isMedConfidence ? 'bg-blue-500/15' : 'bg-slate-500/10',
-                border: 'border-blue-500/50',
-                text: 'text-blue-400',
-                icon: Clock,
-                label: 'Unverified',
-                glow: '',
-            };
-    }
-};
-
-// === Components ===
-
-// Timeline Step Component
-function TimelineStep({
-    step,
-    currentStep,
-    completedSteps,
-    isExpanded,
-    onToggle,
-    details
-}: {
-    step: TimelineStepData;
-    currentStep: InvestigationStep;
-    completedSteps: InvestigationStep[];
-    isExpanded: boolean;
-    onToggle: () => void;
-    details?: string;
-}) {
-    const isActive = currentStep === step.id;
-    const isCompleted = completedSteps.includes(step.id);
-    const isPending = !isActive && !isCompleted;
-
-    const Icon = step.icon;
-
+// Gradient text component
+function GradientText({ children, className = '' }: { children: React.ReactNode; className?: string }) {
     return (
-        <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            className={`
-                relative p-4 rounded-xl border backdrop-blur-sm cursor-pointer
-                transition-all duration-300
-                ${isActive ? 'bg-cyan-500/10 border-cyan-500/50' : ''}
-                ${isCompleted ? 'bg-white/5 border-white/20' : ''}
-                ${isPending ? 'bg-white/5 border-white/10 opacity-50' : ''}
-            `}
-            onClick={onToggle}
+        <span
+            className={className}
+            style={{
+                background: 'linear-gradient(135deg, #06b6d4 0%, #10b981 50%, #06b6d4 100%)',
+                backgroundSize: '200% 200%',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                backgroundClip: 'text',
+            }}
         >
-            <div className="flex items-center gap-3">
-                {/* Status indicator */}
-                <div className={`
-                    w-10 h-10 rounded-full flex items-center justify-center
-                    ${isActive ? 'bg-cyan-500/20' : ''}
-                    ${isCompleted ? 'bg-emerald-500/20' : ''}
-                    ${isPending ? 'bg-white/5' : ''}
-                `}>
-                    {isActive && (
-                        <motion.div
-                            animate={{ rotate: 360 }}
-                            transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-                        >
-                            <Loader2 className="w-5 h-5 text-cyan-400" />
-                        </motion.div>
-                    )}
-                    {isCompleted && <CheckCircle2 className="w-5 h-5 text-emerald-400" />}
-                    {isPending && <Icon className="w-5 h-5 text-white/40" />}
-                </div>
-
-                {/* Content */}
-                <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                        <span className={`font-medium ${isActive ? 'text-cyan-400' : isCompleted ? 'text-white' : 'text-white/50'}`}>
-                            {step.label}
-                        </span>
-                        {(isCompleted || isActive) && (
-                            isExpanded ? <ChevronUp className="w-4 h-4 text-white/50" /> : <ChevronDown className="w-4 h-4 text-white/50" />
-                        )}
-                    </div>
-                    <p className="text-xs text-white/50 mt-0.5">{step.honestLabel}</p>
-                </div>
-            </div>
-
-            {/* Expandable details (Senior feedback: interactive timeline) */}
-            <AnimatePresence>
-                {isExpanded && details && (
-                    <motion.div
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: 'auto', opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        className="overflow-hidden"
-                    >
-                        <div className="mt-3 pt-3 border-t border-white/10 text-sm text-white/70">
-                            {details}
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-
-            {/* Active pulse animation (subdued for low confidence claims) */}
-            {isActive && (
-                <motion.div
-                    className="absolute inset-0 rounded-xl border-2 border-cyan-400/50"
-                    animate={{ opacity: [0.5, 0, 0.5] }}
-                    transition={{ duration: 2, repeat: Infinity }}
-                />
-            )}
-        </motion.div>
+            {children}
+        </span>
     );
 }
 
-// Evidence Card Component
-function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: number }) {
-    const stanceColors = {
-        supports: 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400',
-        refutes: 'bg-red-500/20 border-red-500/50 text-red-400',
-        neutral: 'bg-slate-500/20 border-slate-500/50 text-slate-400',
-    };
+// Glass card component
+function GlassCard({ children, className = '', glow = false }: {
+    children: React.ReactNode;
+    className?: string;
+    glow?: boolean;
+}) {
+    return (
+        <div
+            className={`relative rounded-2xl ${className}`}
+            style={{
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                boxShadow: glow ? '0 0 60px rgba(6, 182, 212, 0.1)' : 'none',
+            }}
+        >
+            {children}
+        </div>
+    );
+}
 
-    const sourceIcon = SOURCE_ICONS[evidence.source_type] || '🌐';
-    const sourceLabel = SOURCE_LABELS[evidence.source_type] || 'Source';
-
-    // Trust score badge (Senior feedback: simple tooltip)
-    const getTrustBadge = (score: number) => {
-        if (score >= 80) return { label: 'Highly Trusted', color: 'text-emerald-400' };
-        if (score >= 60) return { label: 'Generally Reliable', color: 'text-cyan-400' };
-        if (score >= 40) return { label: 'Mixed Reliability', color: 'text-amber-400' };
-        return { label: 'Low Trust', color: 'text-red-400' };
-    };
-
-    const trustBadge = getTrustBadge(evidence.trust_score);
+// Numbered step indicator (supermemory style)
+function StepIndicator({
+    step,
+    isActive,
+    isComplete,
+    isPending
+}: {
+    step: typeof STEPS[number];
+    isActive: boolean;
+    isComplete: boolean;
+    isPending: boolean;
+}) {
+    const Icon = step.icon;
 
     return (
         <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.15 }}
-            className="p-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
+            transition={{ delay: step.num * 0.1 }}
+            className="flex flex-col items-center gap-3"
+            style={{ minWidth: '80px' }}
+        >
+            {/* Numbered circle */}
+            <div
+                className="relative w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500"
+                style={{
+                    background: isComplete
+                        ? 'linear-gradient(135deg, #10b981, #059669)'
+                        : isActive
+                            ? 'linear-gradient(135deg, #06b6d4, #0891b2)'
+                            : 'rgba(255, 255, 255, 0.05)',
+                    border: isActive
+                        ? '2px solid rgba(6, 182, 212, 0.5)'
+                        : '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: isActive
+                        ? '0 0 30px rgba(6, 182, 212, 0.4)'
+                        : isComplete
+                            ? '0 0 20px rgba(16, 185, 129, 0.3)'
+                            : 'none',
+                }}
+            >
+                {isComplete ? (
+                    <CheckCircle2 className="w-6 h-6 text-white" />
+                ) : isActive ? (
+                    <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
+                    >
+                        <Loader2 className="w-6 h-6 text-white" />
+                    </motion.div>
+                ) : (
+                    <span
+                        className="text-lg font-semibold"
+                        style={{ color: isPending ? 'rgba(255,255,255,0.3)' : 'white' }}
+                    >
+                        {step.num}
+                    </span>
+                )}
+
+                {/* Active pulse ring */}
+                {isActive && (
+                    <motion.div
+                        className="absolute inset-0 rounded-full"
+                        style={{ border: '2px solid rgba(6, 182, 212, 0.5)' }}
+                        animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+                        transition={{ duration: 2, repeat: Infinity }}
+                    />
+                )}
+            </div>
+
+            {/* Label */}
+            <div className="text-center">
+                <div
+                    className="text-sm font-medium"
+                    style={{
+                        color: isActive ? '#06b6d4' : isComplete ? '#10b981' : 'rgba(255,255,255,0.5)'
+                    }}
+                >
+                    {step.label}
+                </div>
+                <div
+                    className="text-xs mt-0.5"
+                    style={{ color: 'rgba(255,255,255,0.3)' }}
+                >
+                    {step.desc}
+                </div>
+            </div>
+        </motion.div>
+    );
+}
+
+// Connection line between steps
+function StepConnector({ isComplete }: { isComplete: boolean }) {
+    return (
+        <div
+            className="flex-1 h-0.5 mx-2 rounded-full transition-all duration-500"
+            style={{
+                background: isComplete
+                    ? 'linear-gradient(90deg, #10b981, #06b6d4)'
+                    : 'rgba(255, 255, 255, 0.1)',
+                minWidth: '20px',
+                maxWidth: '60px',
+            }}
+        />
+    );
+}
+
+// Evidence card
+function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: number }) {
+    const stanceStyles = {
+        supports: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', text: '#10b981', label: '✓ Supports' },
+        refutes: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: '#ef4444', label: '✗ Refutes' },
+        neutral: { bg: 'rgba(107, 114, 128, 0.1)', border: 'rgba(107, 114, 128, 0.3)', text: '#9ca3af', label: '○ Neutral' },
+    };
+    const s = stanceStyles[evidence.stance] || stanceStyles.neutral;
+    const icon = SOURCE_ICONS[evidence.source_type] || '🌐';
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            className="p-5 rounded-xl transition-all duration-300 hover:scale-[1.02]"
+            style={{
+                background: 'rgba(255, 255, 255, 0.02)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+            }}
         >
             {/* Header */}
-            <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
-                    <span className="text-lg">{sourceIcon}</span>
-                    <div>
-                        <span className="text-sm font-medium text-white">{evidence.source_domain}</span>
-                        <span className="text-xs text-white/40 ml-2">{sourceLabel}</span>
-                    </div>
+                    <span className="text-xl">{icon}</span>
+                    <span className="font-medium text-white">{evidence.source_domain}</span>
                 </div>
-
-                {/* Stance badge */}
-                <div className={`px-2 py-1 rounded-full text-xs font-medium border ${stanceColors[evidence.stance]}`}>
-                    {evidence.stance === 'supports' ? '✓ Supports' : evidence.stance === 'refutes' ? '✗ Refutes' : '○ Neutral'}
-                </div>
+                <span
+                    className="px-2.5 py-1 rounded-full text-xs font-medium"
+                    style={{ background: s.bg, border: `1px solid ${s.border}`, color: s.text }}
+                >
+                    {s.label}
+                </span>
             </div>
 
             {/* Content */}
-            <p className="text-sm text-white/70 mb-3 line-clamp-2">
+            <p className="text-sm leading-relaxed mb-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
                 {evidence.text_preview}
             </p>
 
             {/* Footer */}
             <div className="flex items-center justify-between text-xs">
-                {/* Trust score with tooltip (Senior feedback) */}
-                <span
-                    className={trustBadge.color}
-                    title={`Trust Score: ${evidence.trust_score}/100 - ${trustBadge.label}`}
-                >
-                    Trust: {evidence.trust_score}% • {trustBadge.label}
+                <span style={{ color: evidence.trust_score >= 80 ? '#10b981' : evidence.trust_score >= 50 ? '#f59e0b' : '#ef4444' }}>
+                    Trust: {evidence.trust_score}%
                 </span>
-
                 {evidence.source_url && (
                     <a
                         href={evidence.source_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 text-cyan-400 hover:text-cyan-300"
+                        className="flex items-center gap-1 hover:opacity-80"
+                        style={{ color: '#06b6d4' }}
                     >
                         View <ExternalLink className="w-3 h-3" />
                     </a>
@@ -302,98 +252,180 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
     );
 }
 
-// Not Checkable Educational Display (Senior feedback: teaching, not rejection)
-function NotCheckableDisplay({ claimType, text }: { claimType: string; text: string }) {
-    const explanations: Record<string, { title: string; description: string; tip: string }> = {
-        opinion: {
-            title: '💭 This appears to be an Opinion',
-            description: 'Opinions and value judgments express personal preferences or beliefs. They cannot be objectively verified as true or false.',
-            tip: 'Try rephrasing as a factual claim, e.g., "Studies show X is better than Y"',
+// Verdict display
+function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
+    const verdictStyles: Record<VerdictType, { gradient: string; icon: typeof CheckCircle2; label: string }> = {
+        verified_true: {
+            gradient: 'linear-gradient(135deg, #10b981, #059669)',
+            icon: CheckCircle2,
+            label: 'VERIFIED TRUE'
         },
-        prediction: {
-            title: '🔮 This appears to be a Prediction',
-            description: 'Predictions about future events cannot be verified until they occur. We cannot fact-check what hasn\'t happened yet.',
-            tip: 'Check back after the predicted date, or search for expert forecasts on this topic.',
+        verified_false: {
+            gradient: 'linear-gradient(135deg, #ef4444, #dc2626)',
+            icon: XCircle,
+            label: 'VERIFIED FALSE'
         },
-        question: {
-            title: '❓ This appears to be a Question',
-            description: 'Questions ask for information rather than making claims. To fact-check, we need an assertion.',
-            tip: 'Convert your question to a statement, e.g., "Is X true?" → "X is true"',
+        disputed: {
+            gradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
+            icon: AlertTriangle,
+            label: 'DISPUTED'
         },
-        command: {
-            title: '👆 This appears to be a Command',
-            description: 'Commands or instructions tell someone what to do. They don\'t make factual claims that can be verified.',
-            tip: 'If this relates to a factual claim, try phrasing it as a statement.',
+        unverified: {
+            gradient: 'linear-gradient(135deg, #6b7280, #4b5563)',
+            icon: AlertCircle,
+            label: 'UNVERIFIED'
         },
-        hypothetical: {
-            title: '🤔 This appears to be a Hypothetical',
-            description: 'Hypothetical scenarios ("what if...") explore possibilities rather than making factual claims.',
-            tip: 'Try focusing on a specific, verifiable aspect of your hypothetical.',
+        insufficient_evidence: {
+            gradient: 'linear-gradient(135deg, #eab308, #ca8a04)',
+            icon: AlertCircle,
+            label: 'INSUFFICIENT EVIDENCE'
         },
-        unknown: {
-            title: '🔍 Unable to Classify',
-            description: 'We couldn\'t determine the type of this statement. It may be too ambiguous or complex.',
-            tip: 'Try simplifying your input or breaking it into smaller, clearer claims.',
+        not_checkable: {
+            gradient: 'linear-gradient(135deg, #6b7280, #4b5563)',
+            icon: AlertCircle,
+            label: 'NOT CHECKABLE'
         },
     };
 
-    const info = explanations[claimType] || explanations.unknown;
+    const v = verdictStyles[claim.verdict as VerdictType] || verdictStyles.unverified;
+    const Icon = v.icon;
+    const confidence = Math.round(claim.confidence * 100);
 
     return (
         <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="p-6 rounded-2xl bg-gradient-to-br from-slate-500/10 to-slate-600/5 border border-slate-500/30"
+            transition={{ type: "spring", damping: 20 }}
         >
-            <h3 className="text-xl font-medium mb-3">{info.title}</h3>
-            <p className="text-white/70 mb-4">{info.description}</p>
-
-            <div className="flex items-start gap-2 p-3 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-                <Lightbulb className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" />
-                <div>
-                    <span className="text-sm font-medium text-cyan-400">Tip:</span>
-                    <p className="text-sm text-white/70 mt-1">{info.tip}</p>
+            <GlassCard className="p-8" glow>
+                {/* Verdict label */}
+                <div
+                    className="text-xs font-medium tracking-widest mb-4"
+                    style={{ color: 'rgba(255,255,255,0.4)' }}
+                >
+                    VERDICT
                 </div>
-            </div>
 
-            <div className="mt-4 p-3 rounded-lg bg-white/5">
-                <span className="text-xs text-white/50">Your input:</span>
-                <p className="text-sm text-white/70 mt-1">"{text}"</p>
-            </div>
+                {/* Main verdict */}
+                <div className="flex items-center gap-4 mb-6">
+                    <div
+                        className="w-16 h-16 rounded-2xl flex items-center justify-center"
+                        style={{ background: v.gradient }}
+                    >
+                        <Icon className="w-8 h-8 text-white" />
+                    </div>
+                    <div>
+                        <div
+                            className="text-3xl font-bold"
+                            style={{
+                                background: v.gradient,
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                            }}
+                        >
+                            {v.label}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Confidence bar */}
+                <div className="mb-6">
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                            Evidence Confidence
+                        </span>
+                        <span className="text-sm font-semibold" style={{ color: '#06b6d4' }}>
+                            {confidence}%
+                        </span>
+                    </div>
+                    <div
+                        className="h-2 rounded-full overflow-hidden"
+                        style={{ background: 'rgba(255,255,255,0.1)' }}
+                    >
+                        <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${confidence}%` }}
+                            transition={{ duration: 1, ease: "easeOut" }}
+                            className="h-full rounded-full"
+                            style={{ background: v.gradient }}
+                        />
+                    </div>
+                    <p className="text-xs mt-2 italic" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        Based on evidence consistency, not absolute truth
+                    </p>
+                </div>
+
+                {/* Summary */}
+                <p className="text-base leading-relaxed mb-6" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                    {claim.evidence_summary}
+                </p>
+
+                {/* Stats */}
+                <div className="flex gap-4">
+                    <div
+                        className="px-4 py-2 rounded-lg"
+                        style={{ background: 'rgba(255,255,255,0.05)' }}
+                    >
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{claim.sources_checked} sources</span>
+                    </div>
+                    <div
+                        className="px-4 py-2 rounded-lg"
+                        style={{ background: 'rgba(255,255,255,0.05)' }}
+                    >
+                        <span style={{ color: 'rgba(255,255,255,0.6)' }}>{claim.investigation_time_ms}ms</span>
+                    </div>
+                </div>
+            </GlassCard>
         </motion.div>
     );
 }
 
-// Confidence Meter with Context (Senior feedback)
-function ConfidenceMeter({ confidence, verdict }: { confidence: number; verdict: VerdictType }) {
-    const percentage = Math.round(confidence * 100);
-    const verdictStyle = getVerdictStyle(verdict, confidence);
+// Not checkable education
+function NotCheckableEducation({ claimType, text }: { claimType: string; text: string }) {
+    const info: Record<string, { icon: string; title: string; desc: string; tip: string }> = {
+        opinion: {
+            icon: '💭',
+            title: 'This is an Opinion',
+            desc: 'Opinions express personal beliefs and cannot be objectively verified.',
+            tip: 'Try rephrasing as a factual claim with measurable criteria.'
+        },
+        prediction: {
+            icon: '🔮',
+            title: 'This is a Prediction',
+            desc: 'Future events cannot be verified until they occur.',
+            tip: 'Check back after the predicted date, or search for expert forecasts.'
+        },
+        question: {
+            icon: '❓',
+            title: 'This is a Question',
+            desc: 'Questions seek information rather than making claims.',
+            tip: 'Convert your question to a statement to fact-check it.'
+        },
+    };
+    const i = info[claimType] || { icon: '🔍', title: 'Unable to Verify', desc: 'This statement cannot be fact-checked.', tip: 'Try simplifying or rephrasing.' };
 
     return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between text-sm">
-                <span className="text-white/70">Evidence Confidence</span>
-                <span className={verdictStyle.text}>{percentage}%</span>
+        <GlassCard className="p-8">
+            <div className="text-4xl mb-4">{i.icon}</div>
+            <h3 className="text-2xl font-semibold text-white mb-3">{i.title}</h3>
+            <p className="text-base mb-6" style={{ color: 'rgba(255,255,255,0.6)' }}>{i.desc}</p>
+
+            <div
+                className="p-4 rounded-xl flex gap-3"
+                style={{ background: 'rgba(6, 182, 212, 0.1)', border: '1px solid rgba(6, 182, 212, 0.2)' }}
+            >
+                <Lightbulb className="w-5 h-5 flex-shrink-0" style={{ color: '#06b6d4' }} />
+                <div>
+                    <span className="text-sm font-medium" style={{ color: '#06b6d4' }}>Tip:</span>
+                    <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{i.tip}</p>
+                </div>
             </div>
 
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-                <motion.div
-                    initial={{ width: 0 }}
-                    animate={{ width: `${percentage}%` }}
-                    transition={{ duration: 1, ease: "easeOut" }}
-                    className={`h-full rounded-full ${verdict === 'verified_true' ? 'bg-emerald-500' :
-                        verdict === 'verified_false' ? 'bg-red-500' :
-                            verdict === 'disputed' ? 'bg-amber-500' :
-                                'bg-cyan-500'
-                        }`}
-                />
+            <div className="mt-6 p-4 rounded-xl" style={{ background: 'rgba(255,255,255,0.03)' }}>
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Your input:</span>
+                <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>"{text}"</p>
             </div>
-
-            {/* Context label (Senior feedback: explain what confidence means) */}
-            <p className="text-xs text-white/40 italic">
-                Based on evidence consistency, not absolute truth
-            </p>
-        </div>
+        </GlassCard>
     );
 }
 
@@ -401,57 +433,33 @@ function ConfidenceMeter({ confidence, verdict }: { confidence: number; verdict:
 export function InvestigationPage() {
     const [inputText, setInputText] = useState('');
     const [currentStep, setCurrentStep] = useState<InvestigationStep>('idle');
-    const [completedSteps, setCompletedSteps] = useState<InvestigationStep[]>([]);
-    const [expandedStep, setExpandedStep] = useState<InvestigationStep | null>(null);
-    const [stepDetails, setStepDetails] = useState<Record<InvestigationStep, string>>({} as any);
+    const [completedSteps, setCompletedSteps] = useState<string[]>([]);
     const [_result, setResult] = useState<V3InvestigateResponse | null>(null);
     const [primaryClaim, setPrimaryClaim] = useState<V3VerifiedClaim | null>(null);
     const [error, setError] = useState<string | null>(null);
 
-    // Simulate staged investigation (Senior feedback: artificial delays)
-    const runStagedInvestigation = useCallback(async () => {
+    const runInvestigation = useCallback(async () => {
         if (!inputText.trim()) return;
 
         setError(null);
         setResult(null);
         setPrimaryClaim(null);
         setCompletedSteps([]);
-        setStepDetails({} as any);
 
-        // Start API request in background
         const apiPromise = investigateClaim(inputText);
 
-        // Run through timeline steps with minimum delays
-        for (const step of TIMELINE_STEPS) {
-            setCurrentStep(step.id);
-
-            // Wait minimum duration for UX pacing
+        // Animate through steps
+        for (const step of STEPS) {
+            setCurrentStep(step.id as InvestigationStep);
             await new Promise(resolve => setTimeout(resolve, step.duration));
-
-            // Add to completed
             setCompletedSteps(prev => [...prev, step.id]);
-            setStepDetails(prev => ({ ...prev, [step.id]: `Completed in ${step.duration}ms` }));
         }
 
-        // Wait for API response
         try {
             const response = await apiPromise;
             setResult(response);
-
-            // Extract primary claim from verified_claims array
-            const claim = response.verified_claims?.[0] || null;
-            setPrimaryClaim(claim);
+            setPrimaryClaim(response.verified_claims?.[0] || null);
             setCurrentStep('complete');
-
-            // Update step details with actual results
-            if (claim) {
-                setStepDetails(prev => ({
-                    ...prev,
-                    extracting: `Detected claim type: ${claim.claim_type}`,
-                    searching_web: `Found ${claim.evidence_count} sources`,
-                    synthesizing: `Verdict: ${claim.verdict} (${Math.round(claim.confidence * 100)}% confidence)`,
-                }));
-            }
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Investigation failed');
             setCurrentStep('error');
@@ -462,8 +470,6 @@ export function InvestigationPage() {
         setInputText('');
         setCurrentStep('idle');
         setCompletedSteps([]);
-        setExpandedStep(null);
-        setStepDetails({} as any);
         setResult(null);
         setPrimaryClaim(null);
         setError(null);
@@ -472,219 +478,210 @@ export function InvestigationPage() {
     const isInvestigating = currentStep !== 'idle' && currentStep !== 'complete' && currentStep !== 'error';
 
     return (
-        <div className="min-h-screen pt-20 pb-12 px-4 md:px-8">
-            {/* Background effects */}
-            <div className="fixed inset-0 pointer-events-none">
-                <div className="absolute top-40 left-1/4 w-[500px] h-[500px] bg-cyan-500/5 rounded-full blur-[140px]" />
-                <div className="absolute bottom-40 right-1/4 w-[500px] h-[500px] bg-emerald-500/5 rounded-full blur-[140px]" />
+        <div
+            className="min-h-screen pt-24 pb-16 px-6"
+            style={{ background: 'linear-gradient(180deg, #050505 0%, #0a0a0a 100%)' }}
+        >
+            {/* Background glow effects */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                <div
+                    className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] opacity-30"
+                    style={{
+                        background: 'radial-gradient(ellipse, rgba(6, 182, 212, 0.15) 0%, transparent 70%)',
+                    }}
+                />
             </div>
 
-            <div className="relative z-10 max-w-6xl mx-auto">
-                {/* Header */}
-                <div className="text-center mb-10">
-                    <motion.h1
-                        initial={{ opacity: 0, y: -20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-4xl md:text-5xl font-bold mb-3 bg-gradient-to-r from-cyan-400 to-emerald-400 bg-clip-text text-transparent"
-                    >
-                        TruthLens Investigation
-                    </motion.h1>
-                    <p className="text-white/60">Watch the verification process unfold in real-time</p>
-                </div>
+            <div className="relative z-10 max-w-5xl mx-auto">
+                {/* Hero Header */}
+                <motion.div
+                    initial={{ opacity: 0, y: -30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="text-center mb-12"
+                >
+                    <h1 className="text-5xl md:text-6xl font-bold mb-4 tracking-tight">
+                        <GradientText>TruthLens Investigation</GradientText>
+                    </h1>
+                    <p className="text-lg" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                        Watch the verification process unfold in real-time
+                    </p>
+                </motion.div>
 
                 {/* Input Section */}
-                {currentStep === 'idle' && (
+                <AnimatePresence mode="wait">
+                    {currentStep === 'idle' && (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -20 }}
+                            className="mb-16"
+                        >
+                            <GlassCard className="p-8 max-w-3xl mx-auto">
+                                <label
+                                    className="block text-sm font-medium mb-4"
+                                    style={{ color: 'rgba(255,255,255,0.6)' }}
+                                >
+                                    Enter a claim to investigate
+                                </label>
+                                <textarea
+                                    value={inputText}
+                                    onChange={(e) => setInputText(e.target.value)}
+                                    placeholder="e.g., 'COVID vaccines cause autism' or 'The Earth is flat'"
+                                    className="w-full h-32 px-5 py-4 rounded-xl resize-none text-white text-lg focus:outline-none transition-all"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.03)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                    }}
+                                    onFocus={(e) => e.target.style.borderColor = 'rgba(6, 182, 212, 0.5)'}
+                                    onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
+                                />
+                                <button
+                                    onClick={runInvestigation}
+                                    disabled={!inputText.trim()}
+                                    className="w-full mt-6 py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                                    style={{
+                                        background: inputText.trim()
+                                            ? 'linear-gradient(135deg, #06b6d4 0%, #10b981 100%)'
+                                            : 'rgba(255,255,255,0.1)',
+                                        color: inputText.trim() ? '#000' : 'rgba(255,255,255,0.3)',
+                                        boxShadow: inputText.trim() ? '0 0 40px rgba(6, 182, 212, 0.3)' : 'none',
+                                    }}
+                                >
+                                    <Zap className="w-5 h-5" />
+                                    Start Investigation
+                                    <ChevronRight className="w-5 h-5" />
+                                </button>
+                            </GlassCard>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
+                {/* Timeline Steps - Horizontal */}
+                {(isInvestigating || currentStep === 'complete' || currentStep === 'error') && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
-                        className="max-w-2xl mx-auto mb-10"
+                        className="mb-12"
                     >
-                        <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                            <label className="block text-sm text-white/60 mb-3">
-                                Enter a claim to investigate
-                            </label>
-                            <textarea
-                                value={inputText}
-                                onChange={(e) => setInputText(e.target.value)}
-                                placeholder="e.g., 'COVID vaccines cause autism' or 'New Delhi is the capital of India'"
-                                className="w-full h-32 px-4 py-3 rounded-xl bg-white/5 border border-white/10 
-                                         focus:border-cyan-500/50 focus:outline-none resize-none text-white
-                                         placeholder:text-white/30"
-                            />
-                            <button
-                                onClick={runStagedInvestigation}
-                                disabled={!inputText.trim()}
-                                className="w-full mt-4 py-4 rounded-xl bg-gradient-to-r from-cyan-500 to-emerald-500 
-                                         text-black font-medium hover:shadow-[0_0_30px_rgba(6,182,212,0.3)]
-                                         disabled:opacity-50 disabled:cursor-not-allowed transition-all
-                                         flex items-center justify-center gap-2"
-                            >
-                                <Search className="w-5 h-5" />
-                                Start Investigation
-                            </button>
+                        <div className="flex items-center justify-center flex-wrap gap-2">
+                            {STEPS.map((step, i) => (
+                                <div key={step.id} className="flex items-center">
+                                    <StepIndicator
+                                        step={step}
+                                        isActive={currentStep === step.id}
+                                        isComplete={completedSteps.includes(step.id)}
+                                        isPending={!completedSteps.includes(step.id) && currentStep !== step.id}
+                                    />
+                                    {i < STEPS.length - 1 && (
+                                        <StepConnector isComplete={completedSteps.includes(STEPS[i + 1].id)} />
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Current claim being investigated */}
+                        <div className="mt-8 text-center">
+                            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Investigating:</span>
+                            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>"{inputText}"</p>
                         </div>
                     </motion.div>
                 )}
 
-                {/* Investigation in Progress */}
-                {(isInvestigating || currentStep === 'complete' || currentStep === 'error') && (
-                    <div className="grid md:grid-cols-2 gap-6">
-                        {/* Left: Timeline */}
-                        <div>
-                            <div className="flex items-center justify-between mb-4">
-                                <h2 className="text-xl font-medium">Investigation Timeline</h2>
-                                {currentStep === 'complete' && (
-                                    <button
-                                        onClick={handleReset}
-                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 
-                                                 border border-white/10 hover:bg-white/10 text-sm"
-                                    >
-                                        <RotateCcw className="w-4 h-4" />
-                                        New Search
-                                    </button>
-                                )}
+                {/* Results Section */}
+                <AnimatePresence mode="wait">
+                    {/* Loading state */}
+                    {isInvestigating && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="text-center py-12"
+                        >
+                            <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full" style={{ background: 'rgba(6, 182, 212, 0.1)' }}>
+                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#06b6d4' }} />
+                                <span style={{ color: '#06b6d4' }}>Gathering evidence...</span>
                             </div>
+                        </motion.div>
+                    )}
 
-                            <div className="space-y-3">
-                                {TIMELINE_STEPS.map((step) => (
-                                    <TimelineStep
-                                        key={step.id}
-                                        step={step}
-                                        currentStep={currentStep}
-                                        completedSteps={completedSteps}
-                                        isExpanded={expandedStep === step.id}
-                                        onToggle={() => setExpandedStep(expandedStep === step.id ? null : step.id)}
-                                        details={stepDetails[step.id]}
-                                    />
-                                ))}
-                            </div>
-
-                            {/* Claim being investigated */}
-                            <div className="mt-4 p-4 rounded-xl bg-white/5 border border-white/10">
-                                <span className="text-xs text-white/50">Investigating:</span>
-                                <p className="text-sm text-white/80 mt-1">"{inputText}"</p>
-                            </div>
-                        </div>
-
-                        {/* Right: Results */}
-                        <div>
-                            {/* Error State */}
-                            {error && (
-                                <motion.div
-                                    initial={{ opacity: 0, scale: 0.95 }}
-                                    animate={{ opacity: 1, scale: 1 }}
-                                    className="p-6 rounded-2xl bg-red-500/10 border border-red-500/30"
+                    {/* Error state */}
+                    {error && (
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                        >
+                            <GlassCard className="p-8 max-w-2xl mx-auto text-center">
+                                <XCircle className="w-12 h-12 mx-auto mb-4" style={{ color: '#ef4444' }} />
+                                <h3 className="text-xl font-semibold mb-2" style={{ color: '#ef4444' }}>Investigation Failed</h3>
+                                <p className="mb-6" style={{ color: 'rgba(255,255,255,0.6)' }}>{error}</p>
+                                <button
+                                    onClick={runInvestigation}
+                                    className="px-6 py-3 rounded-xl font-medium"
+                                    style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
                                 >
-                                    <div className="flex items-center gap-3 mb-3">
-                                        <XCircle className="w-8 h-8 text-red-400" />
-                                        <h3 className="text-xl font-medium text-red-400">Investigation Failed</h3>
-                                    </div>
-                                    <p className="text-white/70 mb-4">{error}</p>
-                                    <button
-                                        onClick={runStagedInvestigation}
-                                        className="px-4 py-2 rounded-lg bg-red-500/20 border border-red-500/30 
-                                                 hover:bg-red-500/30 text-red-400"
-                                    >
-                                        Retry Investigation
-                                    </button>
-                                </motion.div>
+                                    <RotateCcw className="w-4 h-4 inline mr-2" />
+                                    Retry
+                                </button>
+                            </GlassCard>
+                        </motion.div>
+                    )}
+
+                    {/* Success state */}
+                    {primaryClaim && currentStep === 'complete' && (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="space-y-8"
+                        >
+                            {/* New search button */}
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleReset}
+                                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all hover:opacity-80"
+                                    style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
+                                >
+                                    <RotateCcw className="w-4 h-4" />
+                                    New Investigation
+                                </button>
+                            </div>
+
+                            {/* Verdict or Not Checkable */}
+                            {primaryClaim.verdict === 'not_checkable' ? (
+                                <NotCheckableEducation
+                                    claimType={primaryClaim.claim_type}
+                                    text={primaryClaim.original_text}
+                                />
+                            ) : (
+                                <VerdictDisplay claim={primaryClaim} />
                             )}
 
-                            {/* Loading placeholder */}
-                            {isInvestigating && !error && (
-                                <div className="p-6 rounded-2xl bg-white/5 border border-white/10 animate-pulse">
-                                    <div className="flex items-center gap-3 mb-4">
-                                        <Loader2 className="w-6 h-6 text-cyan-400 animate-spin" />
-                                        <span className="text-lg text-white/70">Gathering evidence...</span>
-                                    </div>
-                                    <div className="space-y-3">
-                                        <div className="h-4 bg-white/10 rounded w-3/4" />
-                                        <div className="h-4 bg-white/10 rounded w-1/2" />
-                                        <div className="h-4 bg-white/10 rounded w-2/3" />
+                            {/* Evidence cards */}
+                            {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
+                                <div>
+                                    <h2 className="text-xl font-semibold mb-6" style={{ color: 'rgba(255,255,255,0.9)' }}>
+                                        Evidence Found
+                                    </h2>
+                                    <div className="grid md:grid-cols-2 gap-4">
+                                        {primaryClaim.evidence.map((ev, i) => (
+                                            <EvidenceCard key={i} evidence={ev} index={i} />
+                                        ))}
                                     </div>
                                 </div>
                             )}
 
-                            {/* Results */}
-                            {primaryClaim && currentStep === 'complete' && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: 20 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="space-y-4"
-                                >
-                                    {/* Not checkable - Educational display */}
-                                    {primaryClaim.verdict === 'not_checkable' ? (
-                                        <NotCheckableDisplay
-                                            claimType={primaryClaim.claim_type}
-                                            text={primaryClaim.original_text}
-                                        />
-                                    ) : (
-                                        <>
-                                            {/* Verdict Card (intensity tied to confidence) */}
-                                            {(() => {
-                                                const style = getVerdictStyle(primaryClaim.verdict as VerdictType, primaryClaim.confidence);
-                                                const Icon = style.icon;
-                                                return (
-                                                    <motion.div
-                                                        initial={{ scale: 0.9, opacity: 0 }}
-                                                        animate={{ scale: 1, opacity: 1 }}
-                                                        transition={{ type: "spring", damping: 15 }}
-                                                        className={`p-6 rounded-2xl ${style.bg} border ${style.border} ${style.glow}`}
-                                                    >
-                                                        <div className="flex items-center gap-4 mb-4">
-                                                            <div className={`w-14 h-14 rounded-full ${style.bg} flex items-center justify-center`}>
-                                                                <Icon className={`w-8 h-8 ${style.text}`} />
-                                                            </div>
-                                                            <div>
-                                                                <div className="text-xs text-white/50">Verdict</div>
-                                                                <div className={`text-2xl font-bold ${style.text}`}>
-                                                                    {style.label}
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <ConfidenceMeter
-                                                            confidence={primaryClaim.confidence}
-                                                            verdict={primaryClaim.verdict as VerdictType}
-                                                        />
-
-                                                        <p className="mt-4 text-white/70">{primaryClaim.evidence_summary}</p>
-
-                                                        <div className="mt-4 flex gap-4 text-xs text-white/50">
-                                                            <span>{primaryClaim.sources_checked} sources checked</span>
-                                                            <span>{primaryClaim.investigation_time_ms}ms</span>
-                                                        </div>
-                                                    </motion.div>
-                                                );
-                                            })()}
-
-                                            {/* Evidence Cards */}
-                                            {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
-                                                <div>
-                                                    <h3 className="text-lg font-medium mb-3">Evidence Found</h3>
-                                                    <div className="space-y-3">
-                                                        {primaryClaim.evidence.map((ev: V3EvidenceItem, i: number) => (
-                                                            <EvidenceCard key={i} evidence={ev} index={i} />
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </>
-                                    )}
-
-                                    {/* Disclaimer */}
-                                    <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex gap-3">
-                                        <AlertTriangle className="w-5 h-5 text-amber-400 flex-shrink-0" />
-                                        <p className="text-xs text-white/60">
-                                            <span className="text-amber-400 font-medium">Advisory Notice:</span> This is an automated assessment based on available evidence.
-                                            Always verify critical information from multiple trusted sources.
-                                        </p>
-                                    </div>
-                                </motion.div>
-                            )}
-                        </div>
-                    </div>
-                )}
+                            {/* Disclaimer */}
+                            <div
+                                className="p-4 rounded-xl flex gap-3 max-w-2xl mx-auto"
+                                style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)' }}
+                            >
+                                <AlertTriangle className="w-5 h-5 flex-shrink-0" style={{ color: '#f59e0b' }} />
+                                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                                    <span className="font-medium" style={{ color: '#f59e0b' }}>Advisory:</span> This is an automated assessment. Always verify critical information from multiple trusted sources.
+                                </p>
+                            </div>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     );
