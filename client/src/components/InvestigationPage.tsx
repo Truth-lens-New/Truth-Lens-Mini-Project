@@ -4,7 +4,7 @@ import {
     CheckCircle2, XCircle, AlertTriangle,
     Globe, Database, FileSearch, Brain, Shield, Zap,
     ExternalLink, AlertCircle, Loader2, RotateCcw, Lightbulb,
-    ChevronRight, BarChart3, Link as LinkIcon
+    ChevronRight, BarChart3, Link as LinkIcon, Search, Star
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -55,11 +55,12 @@ function GradientText({ children, className = '' }: { children: React.ReactNode;
         <span
             className={className}
             style={{
-                background: 'linear-gradient(135deg, #06b6d4 0%, #10b981 50%, #06b6d4 100%)',
+                background: 'linear-gradient(135deg, #22d3ee 0%, #34d399 50%, #22d3ee 100%)', // Brighter cyan/emerald
                 backgroundSize: '200% 200%',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
                 backgroundClip: 'text',
+                textShadow: '0 0 30px rgba(34, 211, 238, 0.3)', // Glow effect
             }}
         >
             {children}
@@ -74,11 +75,12 @@ function GlassCard({ children, className = '', glow = false }: {
 }) {
     return (
         <div
-            className={`relative rounded-2xl ${className}`}
+            className={`relative rounded-3xl ${className}`}
             style={{
-                background: 'rgba(255, 255, 255, 0.02)',
+                background: 'rgba(255, 255, 255, 0.03)',
                 border: '1px solid rgba(255, 255, 255, 0.08)',
-                boxShadow: glow ? '0 0 60px rgba(6, 182, 212, 0.1)' : 'none',
+                boxShadow: glow ? '0 0 80px rgba(6, 182, 212, 0.15)' : '0 4px 20px rgba(0,0,0,0.2)',
+                backdropFilter: 'blur(10px)',
             }}
         >
             {children}
@@ -102,41 +104,43 @@ function StepIndicator({
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: step.num * 0.1 }}
-            className="flex flex-col items-center gap-3"
+            className="flex flex-col items-center gap-3 relative z-10"
             style={{ minWidth: '80px' }}
         >
             {/* Numbered circle */}
             <div
-                className="relative w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500"
+                className="relative w-16 h-16 rounded-full flex items-center justify-center transition-all duration-500"
                 style={{
                     background: isComplete
                         ? 'linear-gradient(135deg, #10b981, #059669)'
                         : isActive
                             ? 'linear-gradient(135deg, #06b6d4, #0891b2)'
-                            : 'rgba(255, 255, 255, 0.05)',
+                            : 'rgba(20, 20, 20, 0.8)',
                     border: isActive
                         ? '2px solid rgba(6, 182, 212, 0.5)'
-                        : '1px solid rgba(255, 255, 255, 0.1)',
-                    boxShadow: isActive
-                        ? '0 0 30px rgba(6, 182, 212, 0.4)'
                         : isComplete
-                            ? '0 0 20px rgba(16, 185, 129, 0.3)'
+                            ? 'none'
+                            : '1px solid rgba(255, 255, 255, 0.1)',
+                    boxShadow: isActive
+                        ? '0 0 40px rgba(6, 182, 212, 0.5)'
+                        : isComplete
+                            ? '0 0 30px rgba(16, 185, 129, 0.3)'
                             : 'none',
                 }}
             >
                 {isComplete ? (
-                    <CheckCircle2 className="w-6 h-6 text-white" />
+                    <CheckCircle2 className="w-8 h-8 text-white" />
                 ) : isActive ? (
                     <motion.div
                         animate={{ rotate: 360 }}
                         transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
                     >
-                        <Loader2 className="w-6 h-6 text-white" />
+                        <Loader2 className="w-8 h-8 text-white" />
                     </motion.div>
                 ) : (
                     <span
-                        className="text-lg font-semibold"
-                        style={{ color: isPending ? 'rgba(255,255,255,0.3)' : 'white' }}
+                        className="text-xl font-bold"
+                        style={{ color: isPending ? 'rgba(255,255,255,0.2)' : 'rgba(255,255,255,0.8)' }}
                     >
                         {step.num}
                     </span>
@@ -146,7 +150,7 @@ function StepIndicator({
                     <motion.div
                         className="absolute inset-0 rounded-full"
                         style={{ border: '2px solid rgba(6, 182, 212, 0.5)' }}
-                        animate={{ scale: [1, 1.3, 1], opacity: [0.5, 0, 0.5] }}
+                        animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
                         transition={{ duration: 2, repeat: Infinity }}
                     />
                 )}
@@ -154,18 +158,12 @@ function StepIndicator({
 
             <div className="text-center">
                 <div
-                    className="text-sm font-medium"
+                    className="text-sm font-bold tracking-wide uppercase"
                     style={{
-                        color: isActive ? '#06b6d4' : isComplete ? '#10b981' : 'rgba(255,255,255,0.5)'
+                        color: isActive ? '#06b6d4' : isComplete ? '#10b981' : 'rgba(255,255,255,0.4)'
                     }}
                 >
                     {step.label}
-                </div>
-                <div
-                    className="text-xs mt-0.5"
-                    style={{ color: 'rgba(255,255,255,0.3)' }}
-                >
-                    {step.desc}
                 </div>
             </div>
         </motion.div>
@@ -174,8 +172,8 @@ function StepIndicator({
 
 function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: number }) {
     const stanceStyles = {
-        supports: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', text: '#10b981', label: '✓ Supports' },
-        refutes: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: '#ef4444', label: '✗ Refutes' },
+        supports: { bg: 'rgba(16, 185, 129, 0.1)', border: 'rgba(16, 185, 129, 0.3)', text: '#34d399', label: '✓ Supports' },
+        refutes: { bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', text: '#f87171', label: '✗ Refutes' },
         neutral: { bg: 'rgba(107, 114, 128, 0.1)', border: 'rgba(107, 114, 128, 0.3)', text: '#9ca3af', label: '○ Neutral' },
     };
     const s = stanceStyles[evidence.stance] || stanceStyles.neutral;
@@ -186,40 +184,52 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: index * 0.1 }}
-            className="p-5 rounded-xl transition-all duration-300 hover:scale-[1.02]"
+            className="group relative p-6 rounded-2xl transition-all duration-300 hover:scale-[1.01] hover:bg-white/[0.04]"
             style={{
                 background: 'rgba(255, 255, 255, 0.02)',
                 border: '1px solid rgba(255, 255, 255, 0.06)',
             }}
         >
-            <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                    <span className="text-xl">{icon}</span>
-                    <span className="font-medium text-white truncate max-w-[200px]">{evidence.source_domain}</span>
+            <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-white/5 flex items-center justify-center text-xl">
+                        {icon}
+                    </div>
+                    <div>
+                        <div className="font-semibold text-white text-base truncate max-w-[180px]">
+                            {evidence.source_domain}
+                        </div>
+                        <div className="text-xs text-white/40 uppercase tracking-wider font-medium">
+                            {evidence.source_type.replace('_', ' ')}
+                        </div>
+                    </div>
                 </div>
                 <span
-                    className="px-2.5 py-1 rounded-full text-xs font-medium"
+                    className="px-3 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider"
                     style={{ background: s.bg, border: `1px solid ${s.border}`, color: s.text }}
                 >
                     {s.label}
                 </span>
             </div>
 
-            <p className="text-sm leading-relaxed mb-3 line-clamp-3" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                {evidence.text_preview}
+            <p className="text-sm leading-relaxed mb-4 text-white/70">
+                "{evidence.text_preview}"
             </p>
 
-            <div className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                    <span style={{ color: evidence.trust_score >= 80 ? '#10b981' : evidence.trust_score >= 50 ? '#f59e0b' : '#ef4444' }}>
-                        Trust: {evidence.trust_score}%
+            <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                <div className="flex items-center gap-3 w-full max-w-[200px]">
+                    <span
+                        className="text-xs font-bold"
+                        style={{ color: evidence.trust_score >= 80 ? '#34d399' : evidence.trust_score >= 50 ? '#fbbf24' : '#f87171' }}
+                    >
+                        {evidence.trust_score}% Trust
                     </span>
-                    <div className="w-16 h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
                         <div
-                            className="h-full rounded-full"
+                            className="h-full rounded-full transition-all duration-1000"
                             style={{
                                 width: `${evidence.trust_score}%`,
-                                background: evidence.trust_score >= 80 ? '#10b981' : evidence.trust_score >= 50 ? '#f59e0b' : '#ef4444'
+                                background: evidence.trust_score >= 80 ? '#34d399' : evidence.trust_score >= 50 ? '#fbbf24' : '#f87171'
                             }}
                         />
                     </div>
@@ -230,10 +240,9 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
                         href={evidence.source_url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center gap-1 hover:opacity-80 transition-opacity"
-                        style={{ color: '#06b6d4' }}
+                        className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-medium transition-colors"
                     >
-                        View <ExternalLink className="w-3 h-3" />
+                        Source <ExternalLink className="w-3 h-3" />
                     </a>
                 )}
             </div>
@@ -242,24 +251,22 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
 }
 
 function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
-    // Aggregate trust scores
     const trustData = useMemo(() => {
-        return evidence.map((e, i) => ({
+        return evidence.map((e) => ({
             name: e.source_domain,
             trust: e.trust_score,
             stance: e.stance
-        })).sort((a, b) => b.trust - a.trust).slice(0, 8); // Top 8 sources
+        })).sort((a, b) => b.trust - a.trust).slice(0, 8);
     }, [evidence]);
 
-    // Stance distribution
     const stanceData = useMemo(() => {
         const counts = { supports: 0, refutes: 0, neutral: 0 };
         evidence.forEach(e => {
             if (counts[e.stance] !== undefined) counts[e.stance]++;
         });
         return [
-            { name: 'Supports', value: counts.supports, color: '#10b981' },
-            { name: 'Refutes', value: counts.refutes, color: '#ef4444' },
+            { name: 'Supports', value: counts.supports, color: '#34d399' },
+            { name: 'Refutes', value: counts.refutes, color: '#f87171' },
             { name: 'Neutral', value: counts.neutral, color: '#9ca3af' }
         ].filter(d => d.value > 0);
     }, [evidence]);
@@ -268,12 +275,14 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
 
     return (
         <div className="grid md:grid-cols-2 gap-6 mb-8">
-            <GlassCard className="p-6">
-                <div className="flex items-center gap-2 mb-6">
-                    <BarChart3 className="w-5 h-5" style={{ color: '#06b6d4' }} />
-                    <h3 className="font-medium text-white">Source Reliability</h3>
+            <GlassCard className="p-8">
+                <div className="flex items-center gap-3 mb-8">
+                    <div className="p-2 rounded-lg bg-cyan-500/10">
+                        <BarChart3 className="w-5 h-5 text-cyan-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white">Source Reliability</h3>
                 </div>
-                <div className="h-[200px]">
+                <div className="h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={trustData} layout="vertical" margin={{ left: 0, right: 30, top: 0, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="rgba(255,255,255,0.05)" />
@@ -282,16 +291,16 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
                                 type="category"
                                 dataKey="name"
                                 width={120}
-                                tick={{ fill: 'rgba(255,255,255,0.5)', fontSize: 11 }}
+                                tick={{ fill: 'rgba(255,255,255,0.6)', fontSize: 12, fontWeight: 500 }}
                                 axisLine={false}
                                 tickLine={false}
                             />
-                            <Bar dataKey="trust" radius={[0, 4, 4, 0]} barSize={20}>
+                            <Bar dataKey="trust" radius={[0, 4, 4, 0]} barSize={24}>
                                 {trustData.map((entry, index) => (
                                     <Cell
                                         key={`cell-${index}`}
-                                        fill={entry.trust >= 80 ? '#10b981' : entry.trust >= 50 ? '#f59e0b' : '#ef4444'}
-                                        fillOpacity={0.8}
+                                        fill={entry.trust >= 80 ? '#34d399' : entry.trust >= 50 ? '#fbbf24' : '#f87171'}
+                                        fillOpacity={0.9}
                                     />
                                 ))}
                             </Bar>
@@ -300,38 +309,40 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
                 </div>
             </GlassCard>
 
-            <GlassCard className="p-6">
-                <div className="flex items-center gap-2 mb-6">
-                    <Brain className="w-5 h-5" style={{ color: '#06b6d4' }} />
-                    <h3 className="font-medium text-white">Stance Distribution</h3>
+            <GlassCard className="p-8">
+                <div className="flex items-center gap-3 mb-8">
+                    <div className="p-2 rounded-lg bg-purple-500/10">
+                        <Brain className="w-5 h-5 text-purple-400" />
+                    </div>
+                    <h3 className="text-lg font-semibold text-white">Stance Distribution</h3>
                 </div>
-                <div className="h-[200px] flex items-center justify-center">
+                <div className="h-[220px] flex items-center justify-center relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                             <Pie
                                 data={stanceData}
-                                innerRadius={60}
-                                outerRadius={80}
+                                innerRadius={70}
+                                outerRadius={90}
                                 paddingAngle={5}
                                 dataKey="value"
+                                stroke="none"
                             >
                                 {stanceData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                    <Cell key={`cell-${index}`} fill={entry.color} />
                                 ))}
                             </Pie>
                         </PieChart>
                     </ResponsiveContainer>
-                    {/* Center Label */}
-                    <div className="absolute text-center">
-                        <div className="text-2xl font-bold text-white">{evidence.length}</div>
-                        <div className="text-xs text-white/50">Sources</div>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                        <div className="text-3xl font-bold text-white">{evidence.length}</div>
+                        <div className="text-xs text-white/50 uppercase tracking-widest mt-1">Sources</div>
                     </div>
                 </div>
-                <div className="flex justify-center gap-4 mt-2">
+                <div className="flex justify-center gap-6 mt-4">
                     {stanceData.map(d => (
-                        <div key={d.name} className="flex items-center gap-2 text-xs">
-                            <div className="w-2 h-2 rounded-full" style={{ background: d.color }} />
-                            <span style={{ color: 'rgba(255,255,255,0.6)' }}>{d.name} ({d.value})</span>
+                        <div key={d.name} className="flex items-center gap-2">
+                            <div className="w-3 h-3 rounded-full" style={{ background: d.color }} />
+                            <span className="text-sm text-white/70 font-medium">{d.name}</span>
                         </div>
                     ))}
                 </div>
@@ -344,32 +355,32 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
 function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
     const verdictStyles: Record<VerdictType, { gradient: string; icon: typeof CheckCircle2; label: string }> = {
         verified_true: {
-            gradient: 'linear-gradient(135deg, #10b981, #059669)',
+            gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
             icon: CheckCircle2,
             label: 'VERIFIED TRUE'
         },
         verified_false: {
-            gradient: 'linear-gradient(135deg, #ef4444, #dc2626)',
+            gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
             icon: XCircle,
             label: 'VERIFIED FALSE'
         },
         disputed: {
-            gradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
+            gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
             icon: AlertTriangle,
             label: 'DISPUTED'
         },
         unverified: {
-            gradient: 'linear-gradient(135deg, #6b7280, #4b5563)',
+            gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
             icon: AlertCircle,
             label: 'UNVERIFIED'
         },
         insufficient_evidence: {
-            gradient: 'linear-gradient(135deg, #eab308, #ca8a04)',
+            gradient: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
             icon: AlertCircle,
             label: 'INSUFFICIENT EVIDENCE'
         },
         not_checkable: {
-            gradient: 'linear-gradient(135deg, #6b7280, #4b5563)',
+            gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
             icon: AlertCircle,
             label: 'NOT CHECKABLE'
         },
@@ -384,78 +395,130 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ type: "spring", damping: 20 }}
+            className="w-full"
         >
-            <GlassCard className="p-8" glow>
-                <div className="flex flex-col md:flex-row gap-8 items-start">
-                    {/* Main Verdict Info */}
-                    <div className="flex-1">
-                        <div
-                            className="text-xs font-medium tracking-widest mb-4"
-                            style={{ color: 'rgba(255,255,255,0.4)' }}
-                        >
-                            VERDICT ANALYSIS
+            <div className="relative overflow-hidden rounded-[2.5rem] p-[1px]" style={{ background: v.gradient }}>
+                <div className="absolute inset-0 opacity-20 bg-white mix-blend-overlay" />
+
+                <div className="relative bg-[#050505] rounded-[2.5rem] p-8 md:p-12 overflow-hidden">
+                    {/* Background glow for verdict */}
+                    <div
+                        className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20 blur-[100px]"
+                        style={{ background: v.gradient }}
+                    />
+
+                    <div className="relative z-10 flex flex-col md:flex-row gap-8 md:gap-16 items-start">
+                        {/* Main Verdict Info */}
+                        <div className="flex-1 space-y-8">
+                            <div>
+                                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-6">
+                                    <Star className="w-3 h-3 text-white/60" />
+                                    <span className="text-xs font-medium text-white/60 uppercase tracking-widest">
+                                        AI Investigation Result
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center gap-6 mb-2">
+                                    <div
+                                        className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3"
+                                        style={{ background: v.gradient }}
+                                    >
+                                        <Icon className="w-10 h-10 text-white" />
+                                    </div>
+                                    <h2
+                                        className="text-5xl md:text-6xl font-black tracking-tight"
+                                        style={{
+                                            background: v.gradient,
+                                            WebkitBackgroundClip: 'text',
+                                            WebkitTextFillColor: 'transparent',
+                                        }}
+                                    >
+                                        {v.label}
+                                    </h2>
+                                </div>
+                            </div>
+
+                            <div className="bg-white/5 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
+                                <div className="flex items-center justify-between mb-3">
+                                    <span className="text-sm font-medium text-white/70">Confidence Level</span>
+                                    <span className="text-xl font-bold text-white">{confidence}%</span>
+                                </div>
+                                <div className="h-3 bg-black/40 rounded-full overflow-hidden p-0.5">
+                                    <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${confidence}%` }}
+                                        transition={{ duration: 1.5, ease: "easeOut" }}
+                                        className="h-full rounded-full shadow-lg"
+                                        style={{ background: v.gradient }}
+                                    />
+                                </div>
+                            </div>
+
+                            <p className="text-xl leading-relaxed text-white/80 font-light">
+                                {claim.evidence_summary}
+                            </p>
                         </div>
 
-                        <div className="flex items-center gap-4 mb-6">
-                            <div
-                                className="w-16 h-16 rounded-2xl flex items-center justify-center shrink-0"
-                                style={{ background: v.gradient }}
-                            >
-                                <Icon className="w-8 h-8 text-white" />
+                        {/* Quick Stats Column */}
+                        <div className="w-full md:w-72 space-y-4">
+                            <div className="group bg-white/[0.03] hover:bg-white/[0.06] transition-colors rounded-2xl p-5 border border-white/5">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 rounded-lg bg-blue-500/20">
+                                        <Database className="w-4 h-4 text-blue-400" />
+                                    </div>
+                                    <div className="text-xs font-bold text-white/40 uppercase tracking-wider">Sources Checked</div>
+                                </div>
+                                <div className="text-3xl font-bold text-white pl-1">{claim.sources_checked}</div>
                             </div>
-                            <div>
-                                <div
-                                    className="text-3xl md:text-4xl font-bold"
-                                    style={{
-                                        background: v.gradient,
-                                        WebkitBackgroundClip: 'text',
-                                        WebkitTextFillColor: 'transparent',
-                                    }}
-                                >
-                                    {v.label}
+
+                            <div className="group bg-white/[0.03] hover:bg-white/[0.06] transition-colors rounded-2xl p-5 border border-white/5">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 rounded-lg bg-emerald-500/20">
+                                        <Zap className="w-4 h-4 text-emerald-400" />
+                                    </div>
+                                    <div className="text-xs font-bold text-white/40 uppercase tracking-wider">Speed</div>
+                                </div>
+                                <div className="text-3xl font-bold text-white pl-1">{claim.investigation_time_ms}ms</div>
+                            </div>
+
+                            <div className="group bg-white/[0.03] hover:bg-white/[0.06] transition-colors rounded-2xl p-5 border border-white/5">
+                                <div className="flex items-center gap-3 mb-2">
+                                    <div className="p-2 rounded-lg bg-purple-500/20">
+                                        <Brain className="w-4 h-4 text-purple-400" />
+                                    </div>
+                                    <div className="text-xs font-bold text-white/40 uppercase tracking-wider">Category</div>
+                                </div>
+                                <div className="text-lg font-bold text-white pl-1 capitalize truncate">
+                                    {claim.claim_type.replace(/_/g, ' ')}
                                 </div>
                             </div>
                         </div>
-
-                        <div className="mb-6">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>Evidence Confidence</span>
-                                <span className="text-sm font-semibold" style={{ color: '#06b6d4' }}>{confidence}%</span>
-                            </div>
-                            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${confidence}%` }}
-                                    transition={{ duration: 1, ease: "easeOut" }}
-                                    className="h-full rounded-full"
-                                    style={{ background: v.gradient }}
-                                />
-                            </div>
-                        </div>
-
-                        <p className="text-lg leading-relaxed text-white/80">
-                            {claim.evidence_summary}
-                        </p>
-                    </div>
-
-                    {/* Quick Stats */}
-                    <div className="w-full md:w-64 space-y-3">
-                        <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                            <div className="text-xs text-white/40 mb-1">Sources Checked</div>
-                            <div className="text-2xl font-bold text-white">{claim.sources_checked}</div>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                            <div className="text-xs text-white/40 mb-1">Response Time</div>
-                            <div className="text-2xl font-bold text-white">{claim.investigation_time_ms}ms</div>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-4 border border-white/5">
-                            <div className="text-xs text-white/40 mb-1">Claim Type</div>
-                            <div className="text-lg font-medium text-white capitalize">{claim.claim_type.replace('_', ' ')}</div>
-                        </div>
                     </div>
                 </div>
-            </GlassCard>
+            </div>
         </motion.div>
+    );
+}
+
+// Not Checkable UI (Educational)
+function NotCheckableDisplay({ claimType, text }: { claimType: string; text: string }) {
+    return (
+        <GlassCard className="p-12 text-center" glow>
+            <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center mx-auto mb-6">
+                <Lightbulb className="w-12 h-12 text-yellow-500" />
+            </div>
+
+            <h2 className="text-3xl font-bold text-white mb-4">Input Not Verifiable</h2>
+
+            <p className="text-lg text-white/60 max-w-2xl mx-auto mb-8 leading-relaxed">
+                The content you provided appears to be <span className="text-white font-semibold">"{claimType}"</span> which relies on subjective interpretation rather than objective facts.
+            </p>
+
+            <div className="bg-white/5 rounded-2xl p-6 max-w-xl mx-auto border border-white/10">
+                <div className="text-xs text-white/40 uppercase tracking-widest mb-3">Your Input</div>
+                <p className="text-white/80 italic font-serif text-lg">"{text}"</p>
+            </div>
+        </GlassCard>
     );
 }
 
@@ -464,8 +527,8 @@ export function InvestigationPage() {
     const [inputText, setInputText] = useState('');
     const [currentStep, setCurrentStep] = useState<InvestigationStep>('idle');
     const [completedSteps, setCompletedSteps] = useState<string[]>([]);
-    const [_result, setResult] = useState<V3InvestigateResponse | null>(null);
-    const [primaryClaim, setPrimaryClaim] = useState<V3VerifiedClaim | null>(null);
+    const [verifiedClaims, setVerifiedClaims] = useState<V3VerifiedClaim[]>([]);
+    const [activeClaimIndex, setActiveClaimIndex] = useState(0);
     const [error, setError] = useState<string | null>(null);
 
     // Auto-detect URL
@@ -478,8 +541,7 @@ export function InvestigationPage() {
         if (!inputText.trim()) return;
 
         setError(null);
-        setResult(null);
-        setPrimaryClaim(null);
+        setVerifiedClaims([]);
         setCompletedSteps([]);
 
         // Determine input type
@@ -495,8 +557,18 @@ export function InvestigationPage() {
 
         try {
             const response = await apiPromise;
-            setResult(response);
-            setPrimaryClaim(response.verified_claims?.[0] || null);
+
+            // Prioritize checkable claims if multiple found
+            const claims = response.verified_claims || [];
+            // Sort: checkable first, then by confidence
+            claims.sort((a, b) => {
+                const aIdx = a.verdict === 'not_checkable' ? 1 : 0;
+                const bIdx = b.verdict === 'not_checkable' ? 1 : 0;
+                return aIdx - bIdx;
+            });
+
+            setVerifiedClaims(claims);
+            setActiveClaimIndex(0);
             setCurrentStep('complete');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Investigation failed');
@@ -508,40 +580,49 @@ export function InvestigationPage() {
         setInputText('');
         setCurrentStep('idle');
         setCompletedSteps([]);
-        setResult(null);
-        setPrimaryClaim(null);
+        setVerifiedClaims([]);
         setError(null);
     };
 
     const isInvestigating = currentStep !== 'idle' && currentStep !== 'complete' && currentStep !== 'error';
+    const primaryClaim = verifiedClaims[activeClaimIndex];
 
     return (
         <div
-            className="min-h-screen pt-24 pb-16 px-6"
-            style={{ background: 'linear-gradient(180deg, #050505 0%, #0a0a0a 100%)' }}
+            className="min-h-screen pt-28 pb-24 px-6 font-sans"
+            style={{ background: '#050505' }}
         >
-            {/* Background glow effects */}
+            {/* Background ambient light */}
             <div className="fixed inset-0 pointer-events-none overflow-hidden">
                 <div
-                    className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] opacity-30"
-                    style={{
-                        background: 'radial-gradient(ellipse, rgba(6, 182, 212, 0.15) 0%, transparent 70%)',
-                    }}
+                    className="absolute top-[-20%] left-1/2 -translate-x-1/2 w-[1000px] h-[600px] opacity-20 blur-[120px]"
+                    style={{ background: 'radial-gradient(circle, rgba(34, 211, 238, 0.4) 0%, transparent 70%)' }}
                 />
             </div>
 
-            <div className="relative z-10 max-w-6xl mx-auto">
+            <div className="relative z-10 max-w-7xl mx-auto">
+
                 {/* Hero Header */}
                 <motion.div
                     initial={{ opacity: 0, y: -30 }}
                     animate={{ opacity: 1, y: 0 }}
-                    className="text-center mb-12"
+                    className="text-center mb-16"
                 >
-                    <h1 className="text-5xl md:text-6xl font-bold mb-4 tracking-tight">
+                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
+                        <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                        </span>
+                        <span className="text-xs font-semibold text-white/80 uppercase tracking-widest">
+                            TruthLens V3 Active
+                        </span>
+                    </div>
+
+                    <h1 className="text-6xl md:text-7xl font-bold mb-6 tracking-tight">
                         <GradientText>TruthLens Investigation</GradientText>
                     </h1>
-                    <p className="text-lg" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                        Comprehensive claim verification and article analysis
+                    <p className="text-xl md:text-2xl font-light text-white/50 max-w-2xl mx-auto">
+                        Advanced claim verification and real-time evidence synthesis
                     </p>
                 </motion.div>
 
@@ -549,82 +630,91 @@ export function InvestigationPage() {
                 <AnimatePresence mode="wait">
                     {currentStep === 'idle' && (
                         <motion.div
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
                             exit={{ opacity: 0, y: -20 }}
-                            className="mb-16"
+                            className="mb-24"
                         >
-                            <GlassCard className="p-8 max-w-3xl mx-auto">
-                                <div className="flex justify-between items-center mb-4">
-                                    <label
-                                        className="block text-sm font-medium"
-                                        style={{ color: 'rgba(255,255,255,0.6)' }}
-                                    >
-                                        Enter a claim or article URL
-                                    </label>
-                                    {isUrl && (
-                                        <motion.div
-                                            initial={{ opacity: 0, x: 10 }}
-                                            animate={{ opacity: 1, x: 0 }}
-                                            className="px-2 py-1 rounded bg-blue-500/10 text-blue-400 text-xs border border-blue-500/20 flex items-center gap-1"
-                                        >
-                                            <LinkIcon className="w-3 h-3" />
-                                            URL Detected
-                                        </motion.div>
-                                    )}
+                            <div className="max-w-4xl mx-auto relative group">
+                                {/* Glowing border effect */}
+                                <div className="absolute -inset-0.5 bg-gradient-to-r from-cyan-500 to-emerald-500 rounded-[2rem] opacity-30 group-hover:opacity-60 transition duration-1000 blur"></div>
+
+                                <div className="relative bg-[#0a0a0a] rounded-[2rem] p-1.5">
+                                    <div className="bg-[#050505] rounded-[1.8rem] p-8 md:p-10 relative overflow-hidden">
+
+                                        <div className="flex justify-between items-center mb-6">
+                                            <label className="text-sm font-semibold text-white/40 uppercase tracking-widest">
+                                                Investigation Target
+                                            </label>
+                                            {isUrl && (
+                                                <div className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold flex items-center gap-2 border border-blue-500/20">
+                                                    <LinkIcon className="w-3 h-3" />
+                                                    ARTICLE DETECTED
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <textarea
+                                            value={inputText}
+                                            onChange={(e) => setInputText(e.target.value)}
+                                            placeholder="Paste a claim, sentence, or article URL..."
+                                            className="w-full h-40 bg-transparent text-3xl md:text-4xl font-light text-white placeholder-white/20 focus:outline-none resize-none"
+                                            spellCheck={false}
+                                        />
+
+                                        <div className="flex justify-between items-end mt-6">
+                                            <div className="text-xs text-white/20">
+                                                Supports text, URLs, and social media links
+                                            </div>
+                                            <button
+                                                onClick={runInvestigation}
+                                                disabled={!inputText.trim()}
+                                                className="group/btn relative px-8 py-4 rounded-xl font-bold text-lg flex items-center gap-3 transition-all disabled:opacity-40 disabled:cursor-not-allowed overflow-hidden"
+                                                style={{
+                                                    background: inputText.trim()
+                                                        ? 'linear-gradient(135deg, #22d3ee 0%, #34d399 100%)'
+                                                        : 'rgba(255,255,255,0.1)',
+                                                    color: inputText.trim() ? '#000' : 'rgba(255,255,255,0.3)',
+                                                }}
+                                            >
+                                                {/* Shimmer effect */}
+                                                <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
+                                                <Zap className="w-5 h-5 fill-current" />
+                                                <span>{isUrl ? 'Analyze Source' : 'Investigate'}</span>
+                                                <ChevronRight className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
-                                <textarea
-                                    value={inputText}
-                                    onChange={(e) => setInputText(e.target.value)}
-                                    placeholder="Examples:
-- 'COVID vaccines cause autism'
-- https://example.com/news/article"
-                                    className="w-full h-32 px-5 py-4 rounded-xl resize-none text-white text-lg focus:outline-none transition-all"
-                                    style={{
-                                        background: 'rgba(255,255,255,0.03)',
-                                        border: '1px solid rgba(255,255,255,0.1)',
-                                    }}
-                                    onFocus={(e) => e.target.style.borderColor = 'rgba(6, 182, 212, 0.5)'}
-                                    onBlur={(e) => e.target.style.borderColor = 'rgba(255,255,255,0.1)'}
-                                />
-                                <button
-                                    onClick={runInvestigation}
-                                    disabled={!inputText.trim()}
-                                    className="w-full mt-6 py-4 rounded-xl font-semibold text-lg flex items-center justify-center gap-3 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                                    style={{
-                                        background: inputText.trim()
-                                            ? 'linear-gradient(135deg, #06b6d4 0%, #10b981 100%)'
-                                            : 'rgba(255,255,255,0.1)',
-                                        color: inputText.trim() ? '#000' : 'rgba(255,255,255,0.3)',
-                                        boxShadow: inputText.trim() ? '0 0 40px rgba(6, 182, 212, 0.3)' : 'none',
-                                    }}
-                                >
-                                    <Zap className="w-5 h-5" />
-                                    {isUrl ? 'Analyze Article' : 'Start Investigation'}
-                                    <ChevronRight className="w-5 h-5" />
-                                </button>
-                            </GlassCard>
+                            </div>
                         </motion.div>
                     )}
                 </AnimatePresence>
 
-                {/* Timeline Steps - Horizontal */}
+                {/* Timeline Steps */}
                 {(isInvestigating || currentStep === 'complete' || currentStep === 'error') && (
                     <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="mb-12"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="mb-16"
                     >
-                        {/* Connection Lines (Behind) */}
-                        <div className="flex items-center justify-center flex-wrap gap-2">
+                        <div className="flex items-center justify-center flex-wrap gap-4 md:gap-8">
                             {STEPS.map((step) => (
-                                <StepIndicator
-                                    key={step.id}
-                                    step={step}
-                                    isActive={currentStep === step.id}
-                                    isComplete={completedSteps.includes(step.id)}
-                                    isPending={!completedSteps.includes(step.id) && currentStep !== step.id}
-                                />
+                                <div key={step.id} className="relative">
+                                    {/* Connector line */}
+                                    {step.num < 6 && (
+                                        <div className="absolute top-8 left-1/2 w-full h-[2px] bg-white/5 -z-0"
+                                            style={{ width: 'calc(100% + 2rem + 80px)' }} />
+                                    )}
+
+                                    <StepIndicator
+                                        step={step}
+                                        isActive={currentStep === step.id}
+                                        isComplete={completedSteps.includes(step.id)}
+                                        isPending={!completedSteps.includes(step.id) && currentStep !== step.id}
+                                    />
+                                </div>
                             ))}
                         </div>
                     </motion.div>
@@ -632,77 +722,73 @@ export function InvestigationPage() {
 
                 {/* Results Section */}
                 <AnimatePresence mode="wait">
-                    {/* Loading state */}
-                    {isInvestigating && (
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            className="text-center py-12"
-                        >
-                            <div className="inline-flex items-center gap-3 px-6 py-3 rounded-full" style={{ background: 'rgba(6, 182, 212, 0.1)' }}>
-                                <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#06b6d4' }} />
-                                <span style={{ color: '#06b6d4' }}>Analyzing content and gathering evidence...</span>
-                            </div>
-                        </motion.div>
-                    )}
-
                     {/* Error state */}
                     {error && (
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                         >
-                            <GlassCard className="p-8 max-w-2xl mx-auto text-center">
-                                <XCircle className="w-12 h-12 mx-auto mb-4" style={{ color: '#ef4444' }} />
-                                <h3 className="text-xl font-semibold mb-2" style={{ color: '#ef4444' }}>Investigation Failed</h3>
-                                <p className="mb-6" style={{ color: 'rgba(255,255,255,0.6)' }}>{error}</p>
+                            <GlassCard className="p-12 max-w-2xl mx-auto text-center">
+                                <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+                                    <XCircle className="w-10 h-10 text-red-500" />
+                                </div>
+                                <h3 className="text-2xl font-bold text-white mb-2">Investigation Halted</h3>
+                                <p className="text-white/60 mb-8">{error}</p>
                                 <button
                                     onClick={handleReset}
-                                    className="px-6 py-3 rounded-xl font-medium"
-                                    style={{ background: 'rgba(239, 68, 68, 0.2)', color: '#ef4444' }}
+                                    className="px-8 py-3 rounded-full font-bold bg-white/10 hover:bg-white/20 transition-colors text-white"
                                 >
-                                    <RotateCcw className="w-4 h-4 inline mr-2" />
-                                    Try Again
+                                    Retry Investigation
                                 </button>
                             </GlassCard>
                         </motion.div>
                     )}
 
-                    {/* Success state */}
+                    {/* Success Verified State */}
                     {primaryClaim && currentStep === 'complete' && (
                         <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            className="space-y-8"
+                            initial={{ opacity: 0, y: 40 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.5, ease: "easeOut" }}
+                            className="space-y-12"
                         >
-                            {/* New search button */}
-                            <div className="flex justify-end">
+                            {/* Action Bar */}
+                            <div className="flex justify-between items-center">
+                                <div className="text-sm text-white/40">
+                                    Investigated {verifiedClaims.length} claim(s)
+                                </div>
                                 <button
                                     onClick={handleReset}
-                                    className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm transition-all hover:opacity-80"
-                                    style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.6)' }}
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:bg-white/10 text-white/60 hover:text-white border border-transparent hover:border-white/10"
                                 >
                                     <RotateCcw className="w-4 h-4" />
-                                    New Investigation
+                                    New Search
                                 </button>
                             </div>
 
-                            {/* Verdict */}
-                            <VerdictDisplay claim={primaryClaim} />
+                            {/* Verdict Display */}
+                            {primaryClaim.verdict === 'not_checkable' ? (
+                                <NotCheckableDisplay
+                                    claimType={primaryClaim.claim_type}
+                                    text={primaryClaim.original_text}
+                                />
+                            ) : (
+                                <VerdictDisplay claim={primaryClaim} />
+                            )}
 
-                            {/* Deep Analysis Charts */}
+                            {/* Evidence Visualization */}
                             {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
                                 <AnalysisCharts evidence={primaryClaim.evidence} />
                             )}
 
-                            {/* Evidence cards */}
+                            {/* Detailed Evidence Grid */}
                             {primaryClaim.evidence && primaryClaim.evidence.length > 0 && (
                                 <div>
-                                    <h2 className="text-xl font-semibold mb-6" style={{ color: 'rgba(255,255,255,0.9)' }}>
-                                        Detailed Evidence
+                                    <h2 className="text-2xl font-bold text-white mb-8 flex items-center gap-3">
+                                        <FileSearch className="w-6 h-6 text-emerald-400" />
+                                        Verified Evidence Trail
                                     </h2>
-                                    <div className="grid md:grid-cols-2 gap-4">
+                                    <div className="grid md:grid-cols-2 gap-6">
                                         {primaryClaim.evidence.map((ev, i) => (
                                             <EvidenceCard key={i} evidence={ev} index={i} />
                                         ))}
@@ -710,14 +796,10 @@ export function InvestigationPage() {
                                 </div>
                             )}
 
-                            {/* Disclaimer */}
-                            <div
-                                className="p-4 rounded-xl flex gap-3 max-w-2xl mx-auto"
-                                style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.2)' }}
-                            >
-                                <AlertTriangle className="w-5 h-5 flex-shrink-0" style={{ color: '#f59e0b' }} />
-                                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
-                                    <span className="font-medium" style={{ color: '#f59e0b' }}>Advisory:</span> This is an automated assessment. Always verify critical information from multiple trusted sources.
+                            {/* Footer Disclaimer */}
+                            <div className="border-t border-white/5 pt-8 text-center">
+                                <p className="text-sm text-white/30">
+                                    TruthLens V3 AI Analysis • Generated in {(primaryClaim.investigation_time_ms / 1000).toFixed(2)}s • <span className="hover:text-white/50 cursor-pointer transition-colors">View Methodology</span>
                                 </p>
                             </div>
                         </motion.div>

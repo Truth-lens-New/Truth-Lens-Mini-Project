@@ -19,9 +19,8 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
   const menuItems: { label: string; page: Page }[] = [
     { label: 'Home', page: 'landing' },
     { label: 'Dashboard', page: 'dashboard' },
-    { label: 'Verify Media', page: 'verify-media' },
-    { label: 'Verify Article', page: 'verify-article' },
     { label: 'Investigate', page: 'investigate' },
+    { label: 'Verify Media', page: 'verify-media' },
     { label: 'History', page: 'history' },
     { label: 'Projects', page: 'projects' },
     { label: 'Enterprise', page: 'organization' },
