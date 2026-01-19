@@ -253,10 +253,6 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
 }
 
 function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
-    // Detect dark mode using matchMedia
-    const isDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches
-        || document.documentElement.classList.contains('dark');
-
     const trustData = useMemo(() => {
         return evidence.map((e) => ({
             name: e.source_domain,
@@ -279,9 +275,9 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
 
     if (evidence.length === 0) return null;
 
-    // Theme-aware colors
-    const labelColor = isDark ? 'rgba(255,255,255,0.6)' : 'rgba(0,0,0,0.6)';
-    const gridColor = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.08)';
+    // Theme-aware colors via CSS variables
+    const labelColor = 'oklch(var(--muted-foreground))';
+    const gridColor = 'oklch(var(--border) / 0.2)';
 
     return (
         <div className="grid md:grid-cols-2 gap-6 mb-8">
