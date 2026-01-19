@@ -404,7 +404,7 @@ export function InvestigationPage() {
     const [completedSteps, setCompletedSteps] = useState<InvestigationStep[]>([]);
     const [expandedStep, setExpandedStep] = useState<InvestigationStep | null>(null);
     const [stepDetails, setStepDetails] = useState<Record<InvestigationStep, string>>({} as any);
-    const [result, setResult] = useState<V3InvestigateResponse | null>(null);
+    const [_result, setResult] = useState<V3InvestigateResponse | null>(null);
     const [primaryClaim, setPrimaryClaim] = useState<V3VerifiedClaim | null>(null);
     const [error, setError] = useState<string | null>(null);
 

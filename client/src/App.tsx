@@ -115,7 +115,7 @@ function AppContent() {
             <OrganizationPage />
           </ComingSoonOverlay>
         } />
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings" element={<SettingsPage onNavigate={handleNavigate} />} />
       </Routes>
     </div>
   );

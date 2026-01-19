@@ -52,7 +52,14 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                 >
                   {item.label}
                   {isSoon && <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 uppercase">Soon</span>}
-                  {isNew && <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 uppercase">New</span>}
+                  {isNew && (
+                    <span
+                      className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded uppercase"
+                      style={{ backgroundColor: 'rgba(16, 185, 129, 0.2)', color: '#34d399' }}
+                    >
+                      New
+                    </span>
+                  )}
                 </button>
               );
             })}
