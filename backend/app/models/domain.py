@@ -19,14 +19,26 @@ class InputType(str, Enum):
 
 
 class ClaimType(str, Enum):
-    """Classification types for claims."""
+    """
+    Classification types for claims.
+    
+    Checkable types: Can be verified with evidence
+    Non-checkable types: Cannot be fact-checked (opinions, predictions, etc.)
+    """
+    # Checkable claim types
     SCIENTIFIC_MEDICAL = "scientific_medical"
     POLITICAL_ALLEGATION = "political_allegation"
     FACTUAL_STATEMENT = "factual_statement"
     BREAKING_EVENT = "breaking_event"
-    OPINION = "opinion"
     QUOTE_ATTRIBUTION = "quote_attribution"
-    UNKNOWN = "unknown"
+    
+    # Non-checkable claim types
+    OPINION = "opinion"              # Subjective value judgments
+    PREDICTION = "prediction"        # Future events that haven't occurred
+    QUESTION = "question"            # Interrogative statements
+    COMMAND = "command"              # Imperative statements
+    HYPOTHETICAL = "hypothetical"    # "What if" scenarios
+    UNKNOWN = "unknown"              # Catch-all for unclassifiable
 
 
 @dataclass
@@ -87,13 +99,20 @@ class TypedClaim:
 
 # Evidence strategies per claim type (reference data)
 EVIDENCE_STRATEGIES = {
+    # Checkable types - have verification strategies
     ClaimType.SCIENTIFIC_MEDICAL: "Scientific consensus check (PubMed, WHO)",
     ClaimType.POLITICAL_ALLEGATION: "Multi-source verification, official records",
     ClaimType.FACTUAL_STATEMENT: "Wikidata verification, authoritative sources",
     ClaimType.BREAKING_EVENT: "Multi-source news check, timeline analysis",
-    ClaimType.OPINION: "Not fact-checkable (opinion/value judgment)",
     ClaimType.QUOTE_ATTRIBUTION: "Quote source verification",
-    ClaimType.UNKNOWN: "General fact-check"
+    
+    # Non-checkable types - explain why
+    ClaimType.OPINION: "Not fact-checkable (subjective value judgment)",
+    ClaimType.PREDICTION: "Not fact-checkable (future event hasn't occurred)",
+    ClaimType.QUESTION: "Not fact-checkable (interrogative, not assertion)",
+    ClaimType.COMMAND: "Not fact-checkable (imperative, not assertion)",
+    ClaimType.HYPOTHETICAL: "Not fact-checkable (hypothetical scenario)",
+    ClaimType.UNKNOWN: "Classification unclear - manual review suggested"
 }
 
 # Which claim types are fact-checkable

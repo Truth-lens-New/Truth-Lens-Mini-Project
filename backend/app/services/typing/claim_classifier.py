@@ -69,22 +69,56 @@ class ClaimClassifier:
         'i think', 'i believe', 'i feel', 'in my opinion', 'personally'
     ]
     
+    # Prediction keywords - future events
+    PREDICTION_KEYWORDS = [
+        'will be', 'will have', 'will become', 'going to be',
+        'by 2025', 'by 2026', 'by 2027', 'by 2030', 'by 2040', 'by 2050',
+        'in the future', 'next year', 'next decade', 'soon will',
+        'is predicted', 'is expected to', 'forecast', 'projected to'
+    ]
+    
+    # Question patterns - interrogative statements
+    QUESTION_PATTERNS = ['?', 'is it true', 'did you know', 'have you heard']
+    
+    # Command patterns - imperatives
+    COMMAND_KEYWORDS = [
+        'do this', 'you must', 'you should', 'please do', 'click here',
+        'subscribe', 'share this', 'vote for', 'sign up', 'buy now'
+    ]
+    
+    # Hypothetical patterns
+    HYPOTHETICAL_KEYWORDS = [
+        'what if', 'if only', 'imagine if', 'suppose that',
+        'hypothetically', 'in theory', 'theoretically'
+    ]
+    
     def _classify_single(self, claim: RawClaim) -> TypedClaim:
         """Classify a single claim."""
         
         text_lower = claim.text.lower()
         
-        # Quick check: Opinion keywords override classifier
+        # === QUICK CHECKS (before expensive zero-shot) ===
+        # Check for non-checkable types using keywords
+        
+        # 1. Questions (contains ?)
+        if any(p in text_lower for p in self.QUESTION_PATTERNS):
+            return self._create_non_checkable(claim, ClaimType.QUESTION)
+        
+        # 2. Commands/Imperatives
+        if any(kw in text_lower for kw in self.COMMAND_KEYWORDS):
+            return self._create_non_checkable(claim, ClaimType.COMMAND)
+        
+        # 3. Hypotheticals
+        if any(kw in text_lower for kw in self.HYPOTHETICAL_KEYWORDS):
+            return self._create_non_checkable(claim, ClaimType.HYPOTHETICAL)
+        
+        # 4. Predictions (future events)
+        if any(kw in text_lower for kw in self.PREDICTION_KEYWORDS):
+            return self._create_non_checkable(claim, ClaimType.PREDICTION)
+        
+        # 5. Opinions (subjective judgments)
         if self._is_likely_opinion(text_lower):
-            return TypedClaim(
-                text=claim.text,
-                claim_type=ClaimType.OPINION,
-                type_confidence=0.85,  # High confidence for keyword match
-                is_checkable=False,
-                evidence_strategy=EVIDENCE_STRATEGIES[ClaimType.OPINION],
-                status="Not fact-checkable (opinion/value judgment)",
-                sentence_index=claim.sentence_index
-            )
+            return self._create_non_checkable(claim, ClaimType.OPINION)
         
         # Run zero-shot classification
         result = self.models.zero_shot(
@@ -119,6 +153,18 @@ class ClaimClassifier:
             is_checkable=is_checkable,
             evidence_strategy=strategy,
             status=status,
+            sentence_index=claim.sentence_index
+        )
+    
+    def _create_non_checkable(self, claim: RawClaim, claim_type: ClaimType) -> TypedClaim:
+        """Create TypedClaim for non-checkable statement types."""
+        return TypedClaim(
+            text=claim.text,
+            claim_type=claim_type,
+            type_confidence=0.85,  # High confidence for keyword match
+            is_checkable=False,
+            evidence_strategy=EVIDENCE_STRATEGIES.get(claim_type, "Not fact-checkable"),
+            status=EVIDENCE_STRATEGIES.get(claim_type, "Not fact-checkable"),
             sentence_index=claim.sentence_index
         )
     

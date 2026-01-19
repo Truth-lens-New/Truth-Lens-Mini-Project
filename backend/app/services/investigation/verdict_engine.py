@@ -86,9 +86,14 @@ class VerdictEngine:
     
     def _create_not_checkable_result(self, claim: TypedClaim) -> VerifiedClaim:
         """Create result for non-checkable claims (opinions, predictions, etc)."""
+        # User-friendly explanations for each non-checkable type
         reason_map = {
             ClaimType.OPINION: "Opinions and value judgments cannot be fact-checked.",
-            ClaimType.UNKNOWN: "This statement type cannot be fact-checked.",
+            ClaimType.PREDICTION: "Future predictions cannot be verified until they occur.",
+            ClaimType.QUESTION: "Questions are not assertions that can be verified.",
+            ClaimType.COMMAND: "Commands/imperatives are not factual claims.",
+            ClaimType.HYPOTHETICAL: "Hypothetical scenarios cannot be fact-checked.",
+            ClaimType.UNKNOWN: "This statement type could not be classified for fact-checking.",
         }
         
         return VerifiedClaim(
