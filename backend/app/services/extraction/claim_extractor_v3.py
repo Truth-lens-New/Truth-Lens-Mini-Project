@@ -49,23 +49,67 @@ class ClaimExtractorV3:
             # Skip empty sentences
             if not sent_text:
                 continue
+
+            # Attempt to split compound sentences (e.g., "Main claim, extra info" or "Claim 1, Claim 2")
+            # This handles the user case: "covid vaccines cause autism, weather is nice today"
+            sub_sentences = self._split_compound_sentence(sent)
             
-            # Check if this sentence is a potential claim
-            is_assertion = self._is_assertion(sent)
-            
-            claim = RawClaim(
-                text=sent_text,
-                sentence_index=idx,
-                char_start=sent.start_char,
-                char_end=sent.end_char,
-                is_assertion=is_assertion
-            )
-            
-            # Over-extract: include if assertion OR might be claim
-            if is_assertion or self._might_be_claim(sent):
-                claims.append(claim)
+            for sub_idx, sub_text in enumerate(sub_sentences):
+                # Create a pseudo-doc for the sub-sentence to analyze it
+                sub_doc = self.models.nlp(sub_text)
+                sub_sent = list(sub_doc.sents)[0] if list(sub_doc.sents) else sent
+
+                # Check if this sub-sentence is a potential claim
+                is_assertion = self._is_assertion(sub_sent)
+                might_be_claim = self._might_be_claim(sub_sent)
+                
+                if is_assertion or might_be_claim:
+                    claim = RawClaim(
+                        text=sub_text,
+                        sentence_index=idx * 100 + sub_idx, # Unique index
+                        char_start=sent.start_char, # Approximate
+                        char_end=sent.end_char,     # Approximate
+                        is_assertion=is_assertion
+                    )
+                    claims.append(claim)
         
         return claims
+
+    def _split_compound_sentence(self, sent) -> List[str]:
+        """
+        Split a spaCy sentence into potential sub-claims based on punctuation.
+        Mainly targets comma splices in user input.
+        """
+        text = sent.text.strip()
+        
+        # If it's short, don't split
+        if len(text.split()) < 6:
+            return [text]
+            
+        # Split by comma if the parts look like independent clauses (len > 3 words)
+        parts = [p.strip() for p in text.split(',')]
+        valid_parts = []
+        current_part = []
+        
+        for p in parts:
+            current_part.append(p)
+            combined = ", ".join(current_part)
+            # If this chunk is long enough to be a sentence, verify if it stands alone
+            if len(combined.split()) >= 3:
+                valid_parts.append(combined)
+                current_part = []
+        
+        # If we have leftover, append to last
+        if current_part and valid_parts:
+            valid_parts[-1] += ", " + ", ".join(current_part)
+        elif current_part:
+            valid_parts.append(", ".join(current_part))
+            
+        # Fallback: if splitting didn't create well-sized chunks, return original
+        if len(valid_parts) <= 1:
+            return [text]
+            
+        return valid_parts
     
     def _is_assertion(self, sent) -> bool:
         """

@@ -4,13 +4,13 @@ import {
     CheckCircle2, XCircle, AlertTriangle,
     Globe, Database, FileSearch, Brain, Shield, Zap,
     ExternalLink, AlertCircle, Loader2, RotateCcw, Lightbulb,
-    ChevronRight, BarChart3, Link as LinkIcon, Search, Star
+    ChevronRight, BarChart3, Link as LinkIcon, Star
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
     Cell, PieChart, Pie
 } from 'recharts';
-import type { V3InvestigateResponse, V3VerifiedClaim, V3EvidenceItem } from '../lib/api';
+import type { V3VerifiedClaim, V3EvidenceItem } from '../lib/api';
 import { investigateClaim } from '../lib/api';
 
 // === Types ===
