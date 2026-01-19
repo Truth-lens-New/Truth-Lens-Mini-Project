@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:7000';
 
 export interface User {
     id: string;
@@ -155,4 +155,96 @@ export async function clearAllHistory(): Promise<void> {
     return authFetch('/api/v1/history', {
         method: 'DELETE',
     });
+}
+
+// === V3 API (TruthLens Investigation Pipeline) ===
+
+export interface V3InvestigateRequest {
+    text: string;
+}
+
+export interface V3EvidenceItem {
+    text: string;
+    source_url: string;
+    source_domain: string;
+    source_type: 'fact_check' | 'wikidata' | 'wikipedia' | 'news_article' | 'academic_paper' | 'known_misinfo' | 'web_search' | 'archive' | 'social_media';
+    stance: 'supports' | 'refutes' | 'neutral';
+    stance_confidence: number;
+    trust_score: number;
+}
+
+export interface V3InvestigateResponse {
+    original_text: string;
+    claim_type: string;
+    verdict: 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable';
+    confidence: number;
+    evidence_summary: string;
+    evidence_count: number;
+    sources_checked: number;
+    investigation_time_ms: number;
+    verified_at: string;
+    evidence: V3EvidenceItem[];
+}
+
+export interface V3AnalyzeResponse {
+    input_type: string;
+    claims: {
+        original_text: string;
+        claim_type: string;
+        type_confidence: number;
+        is_checkable: boolean;
+        evidence_strategy: string;
+        status: string;
+    }[];
+    total_claims: number;
+    checkable_claims: number;
+}
+
+/**
+ * Analyze text using V3 pipeline - extracts and classifies claims
+ */
+export async function analyzeClaimV3(text: string): Promise<V3AnalyzeResponse> {
+    const response = await fetch(`${API_URL}/api/v3/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+        throw new Error('Analysis failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Investigate a claim using V3 pipeline - full evidence gathering and verdict
+ */
+export async function investigateClaim(text: string): Promise<V3InvestigateResponse> {
+    const token = localStorage.getItem('token');
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    const response = await fetch(`${API_URL}/api/v3/investigate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Investigation failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Check V3 API health
+ */
+export async function checkV3Health(): Promise<{ status: string; version: string; phase: number }> {
+    const response = await fetch(`${API_URL}/api/v3/health`);
+    return response.json();
 }

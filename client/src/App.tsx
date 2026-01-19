@@ -12,10 +12,11 @@ import { OrganizationPage } from './components/OrganizationPage';
 import { SettingsPage } from './components/SettingsPage';
 import { Navigation } from './components/Navigation';
 import { ComingSoonOverlay } from './components/ComingSoonOverlay';
+import { InvestigationPage } from './components/InvestigationPage';
 import { isAuthenticated, logout } from './lib/api';
 
 export type UserMode = 'Basic' | 'Creator' | 'Professional';
-export type Page = 'landing' | 'login' | 'register' | 'dashboard' | 'verify-media' | 'verify-article' | 'history' | 'projects' | 'organization' | 'settings';
+export type Page = 'landing' | 'login' | 'register' | 'dashboard' | 'verify-media' | 'verify-article' | 'investigate' | 'history' | 'projects' | 'organization' | 'settings';
 
 // Map page names to URL paths
 const pageToPath: Record<Page, string> = {
@@ -25,6 +26,7 @@ const pageToPath: Record<Page, string> = {
   'dashboard': '/dashboard',
   'verify-media': '/verify-media',
   'verify-article': '/verify-article',
+  'investigate': '/investigate',
   'history': '/history',
   'projects': '/projects',
   'organization': '/organization',
@@ -101,6 +103,7 @@ function AppContent() {
           </ComingSoonOverlay>
         } />
         <Route path="/verify-article" element={<ArticleVerification userMode={userMode} onNavigate={handleNavigate} isAuthenticated={authenticated} />} />
+        <Route path="/investigate" element={<InvestigationPage />} />
         <Route path="/history" element={<HistoryPage onNavigate={handleNavigate} />} />
         <Route path="/projects" element={
           <ComingSoonOverlay title="Projects">

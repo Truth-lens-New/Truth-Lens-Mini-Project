@@ -21,6 +21,7 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
     { label: 'Dashboard', page: 'dashboard' },
     { label: 'Verify Media', page: 'verify-media' },
     { label: 'Verify Article', page: 'verify-article' },
+    { label: 'Investigate', page: 'investigate' },
     { label: 'History', page: 'history' },
     { label: 'Projects', page: 'projects' },
     { label: 'Enterprise', page: 'organization' },
@@ -37,19 +38,21 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
           <div className="flex items-center gap-1">
             {menuItems.map((item) => {
               const isSoon = isComingSoon(item.page);
+              const isNew = item.page === 'investigate';
               return (
                 <button
                   key={item.page}
                   onClick={() => onNavigate(item.page)}
                   className={`px-3 py-2 text-sm rounded-lg transition-colors ${currentPage === item.page
-                      ? 'text-white bg-white/10'
-                      : isSoon
-                        ? 'text-gray-500 hover:text-gray-400'
-                        : 'text-gray-400 hover:text-white'
+                    ? 'text-white bg-white/10'
+                    : isSoon
+                      ? 'text-gray-500 hover:text-gray-400'
+                      : 'text-gray-400 hover:text-white'
                     }`}
                 >
                   {item.label}
                   {isSoon && <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-gray-500 uppercase">Soon</span>}
+                  {isNew && <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 uppercase">New</span>}
                 </button>
               );
             })}
@@ -66,10 +69,10 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                   onClick={() => !isLocked && onModeChange(mode)}
                   disabled={isLocked}
                   className={`px-3 py-1.5 rounded-md text-xs flex items-center gap-1 ${userMode === mode && !isLocked
-                      ? 'bg-[#00FFC3] text-black'
-                      : isLocked
-                        ? 'text-gray-600 cursor-not-allowed'
-                        : 'text-gray-400 hover:text-white'
+                    ? 'bg-[#00FFC3] text-black'
+                    : isLocked
+                      ? 'text-gray-600 cursor-not-allowed'
+                      : 'text-gray-400 hover:text-white'
                     }`}
                 >
                   {mode}
