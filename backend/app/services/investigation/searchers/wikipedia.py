@@ -2,7 +2,7 @@
 Wikipedia Search
 
 Free Wikipedia API for encyclopedia lookups.
-Phase 2A: Synchronous implementation - no API key required.
+Phase 2B: Async implementation using httpx.AsyncClient.
 """
 
 import httpx
@@ -22,14 +22,13 @@ class WikipediaResult:
 
 class WikipediaSearcher:
     """
-    Search and retrieve Wikipedia articles.
+    Search and retrieve Wikipedia articles (Async).
     
     Uses the REST API - no key required.
     
     Usage:
-        searcher = WikipediaSearcher()
-        results = searcher.search("COVID-19 vaccine")
-        summary = searcher.get_summary("COVID-19_vaccine")
+        searcher = get_wikipedia_searcher()
+        results = await searcher.search_async("COVID-19 vaccine")
     """
     
     REST_API = "https://en.wikipedia.org/api/rest_v1"
@@ -38,9 +37,9 @@ class WikipediaSearcher:
     def __init__(self, timeout: int = 10):
         self.timeout = timeout
     
-    def search(self, query: str, limit: int = 5) -> List[WikipediaResult]:
+    async def search(self, query: str, limit: int = 5) -> List[WikipediaResult]:
         """
-        Search Wikipedia for articles matching query.
+        Search Wikipedia for articles matching query (Async).
         
         Args:
             query: Search query
@@ -58,14 +57,15 @@ class WikipediaSearcher:
         }
         
         try:
-            response = httpx.get(
-                self.SEARCH_API,
-                params=params,
-                timeout=self.timeout,
-                headers={"User-Agent": "TruthLens/1.0 (fact-checking)"}
-            )
-            response.raise_for_status()
-            data = response.json()
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    self.SEARCH_API,
+                    params=params,
+                    timeout=self.timeout,
+                    headers={"User-Agent": "TruthLens/1.0 (fact-checking)"}
+                )
+                response.raise_for_status()
+                data = response.json()
             
             # OpenSearch returns: [query, [titles], [descriptions], [urls]]
             if len(data) >= 4:
@@ -84,32 +84,30 @@ class WikipediaSearcher:
             print(f"Wikipedia search error: {e}")
             return []
     
-    def get_summary(self, title: str) -> Optional[WikipediaResult]:
+    async def get_summary(self, title: str) -> Optional[WikipediaResult]:
         """
-        Get article summary by title.
+        Get article summary by title (Async).
         
         Args:
             title: Wikipedia article title (spaces or underscores ok)
-            
-        Returns:
-            WikipediaResult with full extract, or None if not found
         """
         # URL-encode the title
         encoded_title = urllib.parse.quote(title.replace(" ", "_"))
         url = f"{self.REST_API}/page/summary/{encoded_title}"
         
         try:
-            response = httpx.get(
-                url,
-                timeout=self.timeout,
-                headers={"User-Agent": "TruthLens/1.0 (fact-checking)"}
-            )
-            
-            if response.status_code == 404:
-                return None
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    url,
+                    timeout=self.timeout,
+                    headers={"User-Agent": "TruthLens/1.0 (fact-checking)"}
+                )
                 
-            response.raise_for_status()
-            data = response.json()
+                if response.status_code == 404:
+                    return None
+                    
+                response.raise_for_status()
+                data = response.json()
             
             page_url = data.get("content_urls", {}).get("desktop", {}).get("page", "")
             
@@ -129,27 +127,20 @@ class WikipediaSearcher:
             print(f"Wikipedia summary error: {e}")
             return None
     
-    def get_extract_for_claim(self, claim: str, max_articles: int = 3) -> List[WikipediaResult]:
+    async def get_extract_for_claim(self, claim: str, max_articles: int = 3) -> List[WikipediaResult]:
         """
-        Search for articles relevant to a claim and get their extracts.
+        Search for articles relevant to a claim and get their extracts (Async).
         
         Combines search + get_summary for comprehensive results.
-        
-        Args:
-            claim: The claim text to search for
-            max_articles: Maximum articles to fetch summaries for
-            
-        Returns:
-            List of WikipediaResult with full extracts
         """
         # First, search for relevant articles
-        search_results = self.search(claim, limit=max_articles)
+        search_results = await self.search(claim, limit=max_articles)
         
         # Get full summaries for top results
         results = []
         for sr in search_results:
             if sr.title:
-                summary = self.get_summary(sr.title)
+                summary = await self.get_summary(sr.title)
                 if summary and summary.extract:
                     results.append(summary)
         

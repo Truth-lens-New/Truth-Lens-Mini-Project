@@ -8,13 +8,9 @@ Phase 2A: Synchronous implementation - no API key required.
 from typing import List, Optional
 from dataclasses import dataclass
 from urllib.parse import urlparse
+import asyncio
 
-try:
-    from duckduckgo_search import DDGS
-    DDGS_AVAILABLE = True
-except ImportError:
-    DDGS_AVAILABLE = False
-    print("Warning: duckduckgo-search not installed. Run: pip install duckduckgo-search")
+from ddgs import DDGS
 
 
 @dataclass
@@ -23,120 +19,91 @@ class SearchResult:
     title: str
     url: str
     snippet: str
+    source: str
     source_domain: str
 
 
 class DuckDuckGoSearcher:
     """
-    Search using DuckDuckGo.
+    Search using DuckDuckGo Instant Answers API (Async).
     
-    No API key required.
-    
-    Usage:
-        searcher = DuckDuckGoSearcher()
-        results = searcher.search("COVID vaccine safety")
-        for r in results:
-            print(f"{r.title}: {r.snippet}")
+    Why AsyncDDGS?
+    - Non-blocking I/O
+    - Parallel execution support for Phase 2B
     """
     
-    def __init__(self, timeout: int = 10):
-        self.timeout = timeout
+    def __init__(self, region: str = "wt-wt", safe_search: str = "moderate"):
+        self.region = region
+        self.safe_search = safe_search
     
-    def search(self, query: str, max_results: int = 10) -> List[SearchResult]:
+    async def search(self, query: str, max_results: int = 5) -> List[SearchResult]:
         """
-        Search DuckDuckGo for a query.
+        Perform a DuckDuckGo search (Async via threadpool).
         
-        Args:
-            query: Search query
-            max_results: Maximum results to return
-            
-        Returns:
-            List of SearchResult objects
+        Since duckduckgo_search v8+ is synchronous, we offload to a thread
+        to prevent blocking the event loop.
         """
-        if not DDGS_AVAILABLE:
-            print("DuckDuckGo search unavailable - library not installed")
-            return []
+        results = []
+        retries = 3
         
-        import time
-        for attempt in range(3):
+        for attempt in range(retries):
             try:
-                with DDGS() as ddgs:
-                    raw_results = list(ddgs.text(
-                        query, 
-                        max_results=max_results,
-                        safesearch='moderate'
-                    ))
+                # Run sync DDGS in a thread
+                # ddgs.text returns a list of dicts
+                ddg_results = await asyncio.to_thread(
+                    self._run_sync_search, query, max_results
+                )
                 
-                results = []
-                for r in raw_results:
-                    domain = self._extract_domain(r.get('href', ''))
+                # If we get here, it succeeded
+                if not ddg_results:
+                     print(f"DuckDuckGo returned 0 results for '{query}' (Attempt {attempt+1}/{retries})")
+                     if attempt < retries - 1:
+                         await asyncio.sleep(2)
+                         continue
+                     return []
+
+                # Parse results
+                for r in ddg_results:
+                    from urllib.parse import urlparse
+                    try:
+                        domain = urlparse(r.get('href', '')).netloc.replace('www.', '')
+                    except:
+                        domain = "unknown"
+                        
                     results.append(SearchResult(
                         title=r.get('title', ''),
                         url=r.get('href', ''),
                         snippet=r.get('body', ''),
+                        source="DuckDuckGo",
                         source_domain=domain
                     ))
                 
-                return results
+                if results:
+                    return results
                 
             except Exception as e:
-                print(f"DuckDuckGo search attempt {attempt+1} error: {e}")
-                if attempt < 2:
-                    time.sleep(2)
-        
-        return []
-    
-    def search_news(self, query: str, max_results: int = 10) -> List[SearchResult]:
-        """
-        Search DuckDuckGo News.
-        
-        Args:
-            query: Search query
-            max_results: Maximum results to return
-            
-        Returns:
-            List of SearchResult objects from news sources
-        """
-        if not DDGS_AVAILABLE:
-            return []
-        
-        try:
-            with DDGS() as ddgs:
-                raw_results = list(ddgs.news(
-                    query,
-                    max_results=max_results
-                ))
-            
-            results = []
-            for r in raw_results:
-                domain = self._extract_domain(r.get('url', ''))
-                results.append(SearchResult(
-                    title=r.get('title', ''),
-                    url=r.get('url', ''),
-                    snippet=r.get('body', ''),
-                    source_domain=domain
-                ))
-            
-            return results
-            
-        except Exception as e:
-            print(f"DuckDuckGo news search error: {e}")
-            return []
-    
-    def _extract_domain(self, url: str) -> str:
-        """Extract domain from URL."""
-        if not url:
-            return "unknown"
-        try:
-            parsed = urlparse(url)
-            domain = parsed.netloc.replace("www.", "")
-            return domain if domain else "unknown"
-        except:
-            return "unknown"
+                print(f"DuckDuckGo search error (Attempt {attempt+1}/{retries}): {e}")
+                if attempt < retries - 1:
+                    await asyncio.sleep(2 * (attempt + 1))
+                else:
+                    print("DuckDuckGo search failed after all retries.")
+                    return []
+                    
+        return results
+
+    def _run_sync_search(self, query: str, max_results: int):
+        """Helper to run sync search in thread."""
+        with DDGS() as ddgs:
+            return ddgs.text(
+                query,
+                region=self.region,
+                safesearch=self.safe_search,
+                max_results=max_results
+            )
 
 
 # Singleton instance
-_searcher_instance: Optional[DuckDuckGoSearcher] = None
+_searcher_instance: None | DuckDuckGoSearcher = None
 
 
 def get_duckduckgo_searcher() -> DuckDuckGoSearcher:

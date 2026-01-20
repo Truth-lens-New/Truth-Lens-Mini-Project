@@ -38,9 +38,9 @@ class VerdictEngine:
         self.orchestrator = get_orchestrator()
         self.synthesizer = get_synthesizer()
     
-    def verify(self, claim: TypedClaim) -> VerifiedClaim:
+    async def verify(self, claim: TypedClaim) -> VerifiedClaim:
         """
-        Verify a claim and return verdict with evidence.
+        Verify a claim and return verdict with evidence (Async).
         
         Args:
             claim: TypedClaim from Phase 1 (claim extraction + typing)
@@ -52,8 +52,8 @@ class VerdictEngine:
         if not claim.is_checkable:
             return self._create_not_checkable_result(claim)
         
-        # Gather evidence
-        evidence = self.orchestrator.investigate(claim)
+        # Gather evidence (Async)
+        evidence = await self.orchestrator.investigate(claim)
         
         # Handle no evidence case
         if not evidence.items:
@@ -68,7 +68,7 @@ class VerdictEngine:
                 sources_checked=evidence.sources_checked
             )
         
-        # Synthesize evidence into verdict
+        # Synthesize evidence into verdict (Sync is fine, it's fast CPU work)
         verdict, confidence, summary = self.synthesizer.synthesize(
             evidence, claim.text
         )

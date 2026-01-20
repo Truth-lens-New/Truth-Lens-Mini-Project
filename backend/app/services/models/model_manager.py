@@ -47,17 +47,21 @@ class ModelManager:
             subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
             self.nlp = spacy.load("en_core_web_sm")
         
-        # 2. Zero-shot classifier for claim typing
-        print("  🧠 Loading BART-large-mnli (this may take a minute)...")
+        # 2. Unified Intelligence Model (BART-Large-MNLI)
+        # Used for BOTH Claim Typing and Stance Detection
+        print("  🧠 Loading Unified Intelligence Model (BART-Large-MNLI)...")
         import torch
-        self.zero_shot = pipeline(
+        self.unified_model = pipeline(
             "zero-shot-classification",
             model="facebook/bart-large-mnli",
-            device="cpu",
+            device="cpu", # Use "cuda" if available, but "cpu" is safer for this dev env
             torch_dtype=torch.float32
         )
         
-        print("✅ All models loaded successfully!")
+        # Alias for backward compatibility if needed, but better to access unified_model
+        self.zero_shot = self.unified_model
+        
+        print("✅ Intelligence Engine Loaded.")
     
     @classmethod
     def is_initialized(cls) -> bool:

@@ -13,7 +13,7 @@ from datetime import datetime
 
 class EvidenceType(str, Enum):
     """Types of evidence sources."""
-    FACT_CHECK = "fact_check"
+    GOOGLE_FACT_CHECK = "google_fact_check"
     WIKIDATA = "wikidata"
     WIKIPEDIA = "wikipedia"
     NEWS_ARTICLE = "news_article"
@@ -22,6 +22,7 @@ class EvidenceType(str, Enum):
     SOCIAL_MEDIA = "social_media"
     KNOWN_MISINFO = "known_misinfo"
     WEB_SEARCH = "web_search"
+    FACT_CHECK = "fact_check"
 
 
 class Stance(str, Enum):
@@ -45,6 +46,7 @@ class Verdict(str, Enum):
 SOURCE_WEIGHTS = {
     EvidenceType.ACADEMIC_PAPER: 1.5,
     EvidenceType.FACT_CHECK: 1.4,
+    EvidenceType.GOOGLE_FACT_CHECK: 1.4,
     EvidenceType.KNOWN_MISINFO: 2.0,  # Our verified database
     EvidenceType.WIKIDATA: 1.2,
     EvidenceType.WIKIPEDIA: 1.0,
@@ -59,16 +61,6 @@ SOURCE_WEIGHTS = {
 class EvidenceItem:
     """
     Single piece of evidence from any source.
-    
-    Attributes:
-        text: The content/snippet of evidence
-        source_url: URL where evidence was found
-        source_domain: Domain name (e.g., 'reuters.com')
-        source_type: Type of source (EvidenceType enum)
-        stance: Whether this evidence SUPPORTS, REFUTES, or is NEUTRAL
-        stance_confidence: Confidence in stance detection (0-1)
-        trust_score: Domain trust score (0-100)
-        retrieved_at: When this evidence was gathered
     """
     text: str
     source_url: str
@@ -83,7 +75,6 @@ class EvidenceItem:
     def weighted_score(self) -> float:
         """
         Calculate weighted score for synthesis.
-        
         Formula: stance_confidence × source_type_weight × (trust_score / 100)
         """
         type_weight = SOURCE_WEIGHTS.get(self.source_type, 0.5)
@@ -107,12 +98,12 @@ class EvidenceItem:
 class EvidenceCollection:
     """
     Collection of evidence items from investigation.
-    
-    Tracks all evidence gathered and provides aggregate scores.
     """
     items: List[EvidenceItem] = field(default_factory=list)
     investigation_time_ms: int = 0
     sources_checked: int = 0
+    stopped_early: bool = False
+    stop_reason: Optional[str] = None
     
     def add(self, item: EvidenceItem):
         """Add evidence item to collection."""
@@ -155,8 +146,6 @@ class EvidenceCollection:
 class VerifiedClaim:
     """
     Final output: claim with verdict and evidence trail.
-    
-    This is what the API returns after investigation.
     """
     original_text: str
     claim_type: str

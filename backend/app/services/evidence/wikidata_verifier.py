@@ -2,20 +2,13 @@
 Wikidata Verifier
 
 Verifies factual claims against Wikidata using SPARQL.
-Phase 2A: Synchronous implementation.
+Phase 2B: Async implementation using httpx.
 """
 
 import re
 import httpx
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
-
-try:
-    from SPARQLWrapper import SPARQLWrapper, JSON
-    SPARQL_AVAILABLE = True
-except ImportError:
-    SPARQL_AVAILABLE = False
-    print("Warning: SPARQLWrapper not installed. Run: pip install SPARQLWrapper")
 
 
 @dataclass
@@ -32,17 +25,15 @@ class WikidataResult:
 
 class WikidataVerifier:
     """
-    Verify factual claims against Wikidata.
+    Verify factual claims against Wikidata (Async).
     
     Examples that can be verified:
     - "India's capital is Delhi" → Query P36 (capital) for Q668 (India)
     - "Modi was born in 1950" → Query P569 (birth date) for Modi entity
-    - "The Eiffel Tower is in Paris" → Query P131 (located in)
     
     Usage:
         verifier = WikidataVerifier()
-        result = verifier.quick_fact_check("India's capital is Mumbai")
-        # Returns WikidataResult(verified=False, actual_value="New Delhi", ...)
+        result = await verifier.quick_fact_check("India's capital is Mumbai")
     """
     
     WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql"
@@ -68,45 +59,24 @@ class WikidataVerifier:
         "founded by": "P112",
         "ceo": "P169",
         "chief executive": "P169",
-        "currency": "P38",
-        "official language": "P37",
-        "continent": "P30",
-        "area": "P2046",
     }
     
     def __init__(self):
-        if SPARQL_AVAILABLE:
-            self.sparql = SPARQLWrapper(self.WIKIDATA_ENDPOINT)
-            self.sparql.setReturnFormat(JSON)
-            self.sparql.addCustomHttpHeader("User-Agent", "TruthLens/1.0")
-        else:
-            self.sparql = None
+        # We use short timeouts for Wikidata to avoid blocking
+        self.timeout = 10
     
-    def verify_claim(self, entity_name: str, property_name: str, 
+    async def verify_claim(self, entity_name: str, property_name: str, 
                      claimed_value: str) -> WikidataResult:
         """
-        Verify a factual claim against Wikidata.
+        Verify a factual claim against Wikidata (Async).
         
         Args:
             entity_name: The subject (e.g., "India")
             property_name: The property (e.g., "capital")
             claimed_value: What the claim says (e.g., "Mumbai")
-            
-        Returns:
-            WikidataResult with verification status
         """
-        if not SPARQL_AVAILABLE:
-            return WikidataResult(
-                verified=None,
-                actual_value=None,
-                claimed_value=claimed_value,
-                entity_id=None,
-                property_id=None,
-                reason="SPARQLWrapper not installed"
-            )
-        
         # Step 1: Find entity ID
-        entity_id = self._find_entity(entity_name)
+        entity_id = await self._find_entity(entity_name)
         if not entity_id:
             return WikidataResult(
                 verified=None,
@@ -130,8 +100,8 @@ class WikidataVerifier:
                 reason=f"Property '{property_name}' not supported"
             )
         
-        # Step 3: Query actual value
-        actual_value = self._get_property_value(entity_id, property_id)
+        # Step 3: Query actual value (SPARQL)
+        actual_value = await self._get_property_value(entity_id, property_id)
         if not actual_value:
             return WikidataResult(
                 verified=None,
@@ -155,8 +125,8 @@ class WikidataVerifier:
             reason="Verified against Wikidata" if verified else f"Wikidata shows: {actual_value}"
         )
     
-    def _find_entity(self, name: str) -> Optional[str]:
-        """Find Wikidata entity ID (Q-number) for a name."""
+    async def _find_entity(self, name: str) -> Optional[str]:
+        """Find Wikidata entity ID (Q-number) async."""
         params = {
             "action": "wbsearchentities",
             "search": name,
@@ -166,21 +136,22 @@ class WikidataVerifier:
         }
         
         try:
-            response = httpx.get(
-                self.WIKIDATA_API, 
-                params=params, 
-                timeout=10,
-                headers={"User-Agent": "TruthLens/1.0"}
-            )
-            data = response.json()
-            if data.get("search"):
-                return data["search"][0]["id"]
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    self.WIKIDATA_API, 
+                    params=params, 
+                    timeout=self.timeout,
+                    headers={"User-Agent": "TruthLens/1.0"}
+                )
+                data = response.json()
+                if data.get("search"):
+                    return data["search"][0]["id"]
         except Exception as e:
             print(f"Wikidata entity search error: {e}")
         return None
     
-    def _get_property_value(self, entity_id: str, property_id: str) -> Optional[str]:
-        """Get property value from Wikidata via SPARQL."""
+    async def _get_property_value(self, entity_id: str, property_id: str) -> Optional[str]:
+        """Get property value from Wikidata via SPARQL (Async)."""
         query = f"""
         SELECT ?valueLabel WHERE {{
             wd:{entity_id} wdt:{property_id} ?value.
@@ -190,11 +161,21 @@ class WikidataVerifier:
         """
         
         try:
-            self.sparql.setQuery(query)
-            results = self.sparql.query().convert()
-            bindings = results.get("results", {}).get("bindings", [])
-            if bindings:
-                return bindings[0]["valueLabel"]["value"]
+            # Execute SPARQL query via HTTP POST
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    self.WIKIDATA_ENDPOINT,
+                    params={"query": query, "format": "json"},
+                    headers={"Accept": "application/json", "User-Agent": "TruthLens/1.0"},
+                    timeout=self.timeout
+                )
+                if response.status_code != 200:
+                    return None
+                    
+                data = response.json()
+                bindings = data.get("results", {}).get("bindings", [])
+                if bindings:
+                    return bindings[0]["valueLabel"]["value"]
         except Exception as e:
             print(f"SPARQL query error: {e}")
         return None
@@ -208,30 +189,22 @@ class WikidataVerifier:
         if claimed_norm == actual_norm:
             return True
         
-        # Partial match (one contains the other)
+        # Partial match
         if claimed_norm in actual_norm or actual_norm in claimed_norm:
             return True
         
-        # Handle common variations
-        # "New Delhi" vs "Delhi"
+        # Handle variations
         if "delhi" in claimed_norm and "delhi" in actual_norm:
             return True
         
         return False
     
-    def quick_fact_check(self, claim_text: str) -> Optional[WikidataResult]:
+    async def quick_fact_check(self, claim_text: str) -> Optional[WikidataResult]:
         """
-        Attempt to extract and verify a factual claim.
-        
-        Tries to parse common patterns like:
-        - "X is the capital of Y"
-        - "X was born in YEAR"
-        - "X is located in Y"
+        Attempt to extract and verify a factual claim (Async).
         
         Returns None if pattern not recognized.
         """
-        claim_lower = claim_text.lower()
-        
         # Pattern: "X is the capital of Y"
         capital_match = re.search(
             r"(.+?)\s+is\s+the\s+capital\s+of\s+(.+?)[\.\?]?$",
@@ -241,7 +214,7 @@ class WikidataVerifier:
         if capital_match:
             claimed_capital = capital_match.group(1).strip()
             country = capital_match.group(2).strip()
-            return self.verify_claim(country, "capital", claimed_capital)
+            return await self.verify_claim(country, "capital", claimed_capital)
         
         # Pattern: "The capital of X is Y"
         capital_match2 = re.search(
@@ -252,9 +225,9 @@ class WikidataVerifier:
         if capital_match2:
             country = capital_match2.group(1).strip()
             claimed_capital = capital_match2.group(2).strip()
-            return self.verify_claim(country, "capital", claimed_capital)
+            return await self.verify_claim(country, "capital", claimed_capital)
         
-        # Pattern: "X was born in YEAR"
+        # Simple Date check: "X born in YEAR"
         birth_match = re.search(
             r"(.+?)\s+was\s+born\s+in\s+(\d{4})",
             claim_text,
@@ -263,23 +236,11 @@ class WikidataVerifier:
         if birth_match:
             person = birth_match.group(1).strip()
             year = birth_match.group(2)
-            result = self.verify_claim(person, "birth date", year)
-            # For dates, check if year matches
+            result = await self.verify_claim(person, "born", year)
             if result.actual_value and year in result.actual_value:
                 result.verified = True
             return result
-        
-        # Pattern: "X is located in Y" / "X is in Y"
-        location_match = re.search(
-            r"(.+?)\s+is\s+(?:located\s+)?in\s+(.+?)[\.\?]?$",
-            claim_text,
-            re.IGNORECASE
-        )
-        if location_match:
-            place = location_match.group(1).strip()
-            location = location_match.group(2).strip()
-            return self.verify_claim(place, "located in", location)
-        
+            
         return None
 
 

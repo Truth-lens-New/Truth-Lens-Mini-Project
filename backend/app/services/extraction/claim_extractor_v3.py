@@ -131,8 +131,9 @@ class ClaimExtractorV3:
             return False
         
         # Has a subject and verb (basic sentence structure)
+        # Include AUX (auxiliary verbs like "is", "are", "was") as valid verbs
         has_subject = any(token.dep_ in ['nsubj', 'nsubjpass'] for token in sent)
-        has_verb = any(token.pos_ == 'VERB' for token in sent)
+        has_verb = any(token.pos_ in ['VERB', 'AUX'] for token in sent)
         
         return has_subject and has_verb
     

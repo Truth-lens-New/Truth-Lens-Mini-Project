@@ -218,6 +218,7 @@ class EvidenceResponse(BaseModel):
     source_domain: str
     source_type: str
     stance: str
+    stance_confidence: float
     trust_score: int
     text_preview: str
 
@@ -310,8 +311,8 @@ async def investigate_content(
         # Step 4: Investigate each claim
         verified_claims = []
         for typed_claim in typed_claims:
-            # FIX: Offload synchronous blocking call to threadpool to prevent freezing event loop
-            result = await run_in_threadpool(verdict_engine.verify, typed_claim)
+            # PHASE 2B: Fully Async - Non-blocking on event loop
+            result = await verdict_engine.verify(typed_claim)
             
             # Build evidence list for response
             evidence = [
@@ -319,6 +320,7 @@ async def investigate_content(
                     source_domain=e.source_domain,
                     source_type=e.source_type.value,
                     stance=e.stance.value,
+                    stance_confidence=round(e.stance_confidence, 3),
                     trust_score=e.trust_score,
                     text_preview=e.text[:100] + "..." if len(e.text) > 100 else e.text
                 )

@@ -23,7 +23,8 @@ class ClaimClassifier:
     LABELS = [
         "scientific or medical claim",
         "political allegation or accusation",
-        "factual statement about dates, numbers, or events",
+        "factual statement or assertion",
+        "common misconception or conspiracy theory",
         "breaking news or recent event",
         "opinion or value judgment",
         "quote attribution"
@@ -33,7 +34,8 @@ class ClaimClassifier:
     LABEL_TO_TYPE = {
         "scientific or medical claim": ClaimType.SCIENTIFIC_MEDICAL,
         "political allegation or accusation": ClaimType.POLITICAL_ALLEGATION,
-        "factual statement about dates, numbers, or events": ClaimType.FACTUAL_STATEMENT,
+        "factual statement or assertion": ClaimType.FACTUAL_STATEMENT,
+        "common misconception or conspiracy theory": ClaimType.FACTUAL_STATEMENT, # Map conspiracy to factual so we check it
         "breaking news or recent event": ClaimType.BREAKING_EVENT,
         "opinion or value judgment": ClaimType.OPINION,
         "quote attribution": ClaimType.QUOTE_ATTRIBUTION
@@ -66,7 +68,8 @@ class ClaimClassifier:
         'best', 'worst', 'great', 'terrible', 'amazing', 'awful',
         'love', 'hate', 'nice', 'bad', 'good', 'beautiful', 'ugly',
         'favorite', 'favourite', 'perfect', 'horrible', 'wonderful',
-        'i think', 'i believe', 'i feel', 'in my opinion', 'personally'
+        'i think', 'i believe', 'i feel', 'in my opinion', 'personally',
+        'should', 'ought to', 'must be', 'prettier', 'nicer', 'better'
     ]
     
     # Prediction keywords - future events
