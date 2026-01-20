@@ -13,6 +13,8 @@ import {
 } from 'recharts';
 import type { V3VerifiedClaim, V3EvidenceItem, HistoryItem } from '../lib/api';
 import { investigateClaim } from '../lib/api';
+import { NeuralStream } from './NeuralStream';
+import { TruthSpectrum } from './TruthSpectrum';
 
 // === Types ===
 type InvestigationStep =
@@ -212,6 +214,30 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
                 >
                     {s.label}
                 </span>
+            </div>
+
+            {/* Source DNA Badges */}
+            <div className="flex gap-2 mb-3 flex-wrap">
+                {evidence.source_type === 'academic_paper' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wide">
+                        Academic Source
+                    </span>
+                )}
+                {evidence.source_type === 'fact_check' && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/10 text-green-400 border border-green-500/20 uppercase tracking-wide">
+                        Verified Fact Check
+                    </span>
+                )}
+                {evidence.trust_score >= 80 && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 uppercase tracking-wide">
+                        High Authority
+                    </span>
+                )}
+                {evidence.trust_score < 40 && (
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-400 border border-red-500/20 uppercase tracking-wide">
+                        Low Reliability
+                    </span>
+                )}
             </div>
 
             <p className="text-sm leading-relaxed mb-4 text-muted-foreground">
@@ -463,6 +489,19 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
                             <p className="text-xl leading-relaxed text-foreground/80 font-light">
                                 {claim.evidence_summary}
                             </p>
+
+                            {/* Consensus Spectrum */}
+                            <div className="pt-4">
+                                <TruthSpectrum
+                                    score={
+                                        claim.verdict === 'verified_true' ? 0.5 + (0.5 * claim.confidence) :
+                                            claim.verdict === 'verified_false' ? 0.5 - (0.5 * claim.confidence) :
+                                                0.5
+                                    }
+                                    confidence={claim.confidence}
+                                    evidenceCount={claim.evidence.length}
+                                />
+                            </div>
                         </div>
 
                         {/* Quick Stats Column */}
@@ -735,31 +774,35 @@ export function InvestigationPage() {
                     )}
                 </AnimatePresence>
 
-                {/* Timeline Steps */}
+                {/* Timeline Steps / Neural Stream */}
                 {(isInvestigating || currentStep === 'complete' || currentStep === 'error') && (
                     <motion.div
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
                         className="mb-16"
                     >
-                        <div className="flex items-center justify-center flex-wrap gap-4 md:gap-8">
-                            {STEPS.map((step) => (
-                                <div key={step.id} className="relative">
-                                    {/* Connector line */}
-                                    {step.num < 6 && (
-                                        <div className="absolute top-8 left-1/2 w-full h-[2px] bg-white/5 -z-0"
-                                            style={{ width: 'calc(100% + 2rem + 80px)' }} />
-                                    )}
+                        {currentStep === 'complete' ? (
+                            <div className="flex items-center justify-center flex-wrap gap-4 md:gap-8">
+                                {STEPS.map((step) => (
+                                    <div key={step.id} className="relative">
+                                        {/* Connector line */}
+                                        {step.num < 6 && (
+                                            <div className="absolute top-8 left-1/2 w-full h-[2px] bg-white/5 -z-0"
+                                                style={{ width: 'calc(100% + 2rem + 80px)' }} />
+                                        )}
 
-                                    <StepIndicator
-                                        step={step}
-                                        isActive={currentStep === step.id}
-                                        isComplete={completedSteps.includes(step.id)}
-                                        isPending={!completedSteps.includes(step.id) && currentStep !== step.id}
-                                    />
-                                </div>
-                            ))}
-                        </div>
+                                        <StepIndicator
+                                            step={step}
+                                            isActive={false}
+                                            isComplete={completedSteps.includes(step.id)}
+                                            isPending={!completedSteps.includes(step.id)}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <NeuralStream currentStep={currentStep} />
+                        )}
                     </motion.div>
                 )}
 

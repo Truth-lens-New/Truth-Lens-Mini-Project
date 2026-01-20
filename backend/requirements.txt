@@ -25,3 +25,6 @@ easyocr>=1.7.1
 ddgs
 bcrypt<4.0.0
 passlib[bcrypt]>=4.0.0
+
+# Stage 0 LLM Enhancement (Groq - Free Llama 3.1)
+groq>=0.4.0

@@ -134,7 +134,23 @@ def analyze_content(request: AnalyzeRequestV3):
             )
         
         # Step 1: Process input
-        processed = input_gateway.process(input_type, request.content)
+        try:
+            processed = input_gateway.process(input_type, request.content)
+        except ValueError as e:
+            if "content cannot be empty" in str(e).lower():
+                # Handle empty input gracefully (Steel Strong UX)
+                return AnalyzeResponseV3(
+                    success=True,
+                    claims=[],
+                    metadata=AnalysisMetadata(
+                        input_type=input_type.value,
+                        processing_time_ms=int((time.time() - start_time) * 1000),
+                        claims_found=0,
+                        checkable_claims=0,
+                        analyzed_at=datetime.now()
+                    )
+                )
+            raise e
         
         # Step 2: Extract claims
         raw_claims = claim_extractor.extract(processed)
@@ -265,6 +281,8 @@ def get_verdict_engine_singleton():
     return _verdict_engine
 
 
+
+
 @router.post("/investigate", response_model=InvestigateResponseV3)
 async def investigate_content(
     request: InvestigateRequestV3,
@@ -305,8 +323,8 @@ async def investigate_content(
         # Step 2: Extract claims
         raw_claims = claim_extractor.extract(processed)
         
-        # Step 3: Type claims
-        typed_claims = claim_classifier.classify(raw_claims)
+        # Step 3: Type claims (ML - CPU bound, run in threadpool)
+        typed_claims = await run_in_threadpool(claim_classifier.classify, raw_claims)
         
         # Step 4: Investigate each claim
         verified_claims = []

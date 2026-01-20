@@ -56,8 +56,8 @@ class StanceDetector:
             neutral_score = scores.get(label_neutral, 0.0)
             
             # Determine Verdict
-            # We use a restrictive threshold to avoid noise
-            THRESHOLD = 0.55
+            # We use a moderate threshold to capture signal from web snippets
+            THRESHOLD = 0.40
             
             if support_score > refute_score and support_score > neutral_score and support_score > THRESHOLD:
                 label = "SUPPORTS"

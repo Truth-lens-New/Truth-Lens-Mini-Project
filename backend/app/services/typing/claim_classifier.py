@@ -94,7 +94,39 @@ class ClaimClassifier:
         'what if', 'if only', 'imagine if', 'suppose that',
         'hypothetically', 'in theory', 'theoretically'
     ]
+
+    # Scientific/Medical Keywords (Strong Domain)
+    SCIENTIFIC_KEYWORDS = [
+        'vaccine', 'virus', 'covid', 'pandemic', 'disease', 'cure', 
+        'treatment', 'doctor', 'scientist', 'autism', 'cancer', 'health', 
+        'medicine', 'drug', 'study', 'research', 'medical', 'clinical',
+        'mutation', 'variant', 'infection', 'immune'
+    ]
+
+    # Political Keywords (Strong Domain)
+    POLITICAL_KEYWORDS = [
+        'election', 'vote', 'ballot', 'congress', 'senate', 'parliament', 
+        'president', 'prime minister', 'politics', 'democrat', 'republican', 
+        'legislation', 'law', 'government', 'policy', 'campaign', 'candidate',
+        'biden', 'trump', 'modi', 'putin', 'white house', 'fraud', 'rigged',
+        'stolen', 'corruption', 'bribe', 'scandal'
+    ]
     
+    def _create_checkable_boost(self, claim: RawClaim, claim_type: ClaimType) -> TypedClaim:
+        """Create TypedClaim with High Confidence for keyword matches."""
+        # Checkable Types need a strategy
+        strategy = EVIDENCE_STRATEGIES.get(claim_type, "General fact-check")
+        
+        return TypedClaim(
+            text=claim.text,
+            claim_type=claim_type,
+            type_confidence=0.95,  # Boost confidence for strong keywords
+            is_checkable=True,
+            evidence_strategy=strategy,
+            status="Pending evidence analysis",
+            sentence_index=claim.sentence_index
+        )
+
     def _classify_single(self, claim: RawClaim) -> TypedClaim:
         """Classify a single claim."""
         
@@ -122,6 +154,21 @@ class ClaimClassifier:
         # 5. Opinions (subjective judgments)
         if self._is_likely_opinion(text_lower):
             return self._create_non_checkable(claim, ClaimType.OPINION)
+
+        # === HYBRID BOOSTING (Keywords override Zero-Shot) ===
+        # 6. Scientific/Medical (Strong Keywords)
+        if any(kw in text_lower for kw in self.SCIENTIFIC_KEYWORDS):
+            return self._create_checkable_boost(claim, ClaimType.SCIENTIFIC_MEDICAL)
+
+        # 7. Political (Strong Keywords)
+        if any(kw in text_lower for kw in self.POLITICAL_KEYWORDS):
+            return self._create_checkable_boost(claim, ClaimType.POLITICAL_ALLEGATION)
+
+        # 8. Scam/Hoax (Strong Keywords) behavior
+        # "Fake", "Scam" are claims about authenticity, definitely checkable.
+        SCAM_KEYWORDS = ['fake', 'scam', 'hoax', 'fraud', 'clickbait', 'viral']
+        if any(kw in text_lower for kw in SCAM_KEYWORDS):
+             return self._create_checkable_boost(claim, ClaimType.FACTUAL_STATEMENT)
         
         # Run zero-shot classification
         result = self.models.zero_shot(

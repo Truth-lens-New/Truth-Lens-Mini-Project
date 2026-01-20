@@ -69,8 +69,13 @@ class VerdictEngine:
             )
         
         # Synthesize evidence into verdict (Sync is fine, it's fast CPU work)
-        verdict, confidence, summary = self.synthesizer.synthesize(
-            evidence, claim.text
+        # UPDATE: It is NOT fast if ML is involved. Use threadpool to avoid blocking loop.
+        from fastapi.concurrency import run_in_threadpool
+        
+        verdict, confidence, summary = await run_in_threadpool(
+            self.synthesizer.synthesize,
+            evidence, 
+            claim.text
         )
         
         return VerifiedClaim(
