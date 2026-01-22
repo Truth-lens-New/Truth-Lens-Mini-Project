@@ -14,7 +14,7 @@ interface NavigationProps {
   isAuthenticated?: boolean;
 }
 
-const comingSoonPages: Page[] = ['verify-media', 'projects', 'organization'];
+const comingSoonPages: Page[] = ['projects', 'organization'];
 
 
 export function Navigation({ currentPage, onNavigate, userMode, onModeChange, userEmail, onLogout, isAuthenticated = false }: NavigationProps) {
