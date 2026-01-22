@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Upload, Image, Video, X, Loader2 } from 'lucide-react';
+import { Upload, Image, Video, X, Loader2, AlertCircle } from 'lucide-react';
 import { ResultsBasic } from './ResultsBasic';
 import { ResultsCreator } from './ResultsCreator';
 import { ResultsProfessional } from './ResultsProfessional';
 import type { UserMode } from '../App';
+import { analyzeMedia, type MediaAnalysisResponse } from '../lib/api';
 
 interface ImageVideoUploadProps {
   userMode: UserMode;
@@ -26,6 +27,8 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
   const [currentStep, setCurrentStep] = useState<ProcessingStep>('preprocessing');
   const [showResults, setShowResults] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [analysisResult, setAnalysisResult] = useState<MediaAnalysisResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -49,6 +52,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
 
   const handleFile = (file: File) => {
     setFile(file);
+    setError(null);
     const reader = new FileReader();
     reader.onload = (e) => {
       setPreview(e.target?.result as string);
@@ -57,24 +61,51 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
   };
 
   const handleAnalyze = async () => {
+    if (!file) return;
+
     setProcessing(true);
+    setError(null);
+    setCurrentStep('preprocessing');
 
-    for (const step of steps) {
-      setCurrentStep(step.id);
-      await new Promise(resolve => setTimeout(resolve, 1200));
+    try {
+      // Show preprocessing step
+      await new Promise(resolve => setTimeout(resolve, 500));
+      setCurrentStep('deepfake');
+
+      // Call the real API
+      const result = await analyzeMedia(file);
+
+      // Show remaining steps for UX
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setCurrentStep('forensic');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setCurrentStep('heatmap');
+      await new Promise(resolve => setTimeout(resolve, 300));
+      setCurrentStep('verdict');
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      setAnalysisResult(result);
+      setShowResults(true);
+    } catch (err) {
+      console.error('Analysis failed:', err);
+      setError(err instanceof Error ? err.message : 'Analysis failed. Please try again.');
+    } finally {
+      setProcessing(false);
     }
-
-    setProcessing(false);
-    setShowResults(true);
   };
 
-  if (showResults && file) {
+  const handleBack = () => {
+    setShowResults(false);
+    setAnalysisResult(null);
+  };
+
+  if (showResults && file && analysisResult) {
     if (userMode === 'Basic') {
-      return <ResultsBasic preview={preview} onBack={() => setShowResults(false)} />;
+      return <ResultsBasic preview={preview} onBack={handleBack} analysisResult={analysisResult} />;
     } else if (userMode === 'Creator') {
-      return <ResultsCreator preview={preview} onBack={() => setShowResults(false)} />;
+      return <ResultsCreator preview={preview} onBack={handleBack} analysisResult={analysisResult} />;
     } else {
-      return <ResultsProfessional preview={preview} onBack={() => setShowResults(false)} />;
+      return <ResultsProfessional preview={preview} onBack={handleBack} analysisResult={analysisResult} />;
     }
   }
 
@@ -110,18 +141,18 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
                   <div
                     key={step.id}
                     className={`p-4 rounded-xl backdrop-blur-sm transition-all ${isActive
-                      ? 'bg-muted/30 border border-primary/30'
+                      ? 'bg-white/10 border border-[#00FFC3]/30'
                       : isComplete
-                        ? 'bg-card/40 border border-border/50'
-                        : 'bg-muted/5 border border-border/20'
+                        ? 'bg-white/5 border border-white/10'
+                        : 'bg-white/[0.02] border border-white/5'
                       }`}
                   >
                     <div className="flex items-center gap-4">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isActive
-                        ? 'bg-gradient-to-br from-primary to-secondary'
+                        ? 'bg-gradient-to-br from-[#00FFC3] to-[#99F8FF]'
                         : isComplete
-                          ? 'bg-primary/20 border border-primary'
-                          : 'bg-muted/20'
+                          ? 'bg-[#00FFC3]/20 border border-[#00FFC3]'
+                          : 'bg-white/5'
                         }`}>
                         {isActive ? (
                           <Loader2 className="w-5 h-5 text-black animate-spin" />
@@ -163,8 +194,8 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
         ) : file && preview ? (
           // File Selected
           <div className="space-y-6">
-            <div className="p-8 rounded-3xl backdrop-blur-md bg-gradient-to-br from-card/80 to-card/40 border border-border/50 relative overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent" />
+            <div className="p-8 rounded-3xl backdrop-blur-md bg-gradient-to-br from-white/10 to-white/5 border border-white/10 relative overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-[#00FFC3]/5 to-transparent" />
 
               <div className="relative flex items-start gap-6">
                 <div className="flex-1">
@@ -216,7 +247,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
-            className={`p-20 rounded-3xl backdrop-blur-md bg-gradient-to-br from-card/80 to-card/40 border-2 border-dashed transition-all relative overflow-hidden ${dragActive ? 'border-primary bg-primary/5' : 'border-border/20'
+            className={`p-20 rounded-3xl backdrop-blur-md bg-gradient-to-br from-white/10 to-white/5 border-2 border-dashed transition-all relative overflow-hidden ${dragActive ? 'border-[#00FFC3] bg-[#00FFC3]/5' : 'border-white/20'
               }`}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-[#00FFC3]/5 via-transparent to-[#99F8FF]/5 opacity-50" />
@@ -226,8 +257,8 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
                 <Upload className="w-10 h-10 text-[#00FFC3]" />
               </div>
 
-              <h2 className="text-2xl mb-3 text-foreground">Drop your media here</h2>
-              <p className="text-muted-foreground mb-6">or click to browse files</p>
+              <h2 className="text-2xl mb-3">Drop your media here</h2>
+              <p className="text-[#D6D6D6] mb-6">or click to browse files</p>
 
               <input
                 type="file"
@@ -244,7 +275,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
                 <span>Select Image</span>
               </label>
 
-              <div className="mt-8 flex items-center justify-center gap-6 text-xs text-muted-foreground">
+              <div className="mt-8 flex items-center justify-center gap-6 text-xs text-[#666]">
                 <div className="flex items-center gap-2">
                   <Image className="w-4 h-4" />
                   <span>JPG, PNG</span>

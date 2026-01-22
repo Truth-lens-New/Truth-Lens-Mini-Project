@@ -256,6 +256,42 @@ export async function investigateClaim(content: string, inputType: 'text' | 'url
             errorMessage = errorData.detail;
         }
         throw new Error(errorMessage);
+// --- Media Analysis (Deepfake Detection) ---
+
+export interface MediaAnalysisResponse {
+    verdict: 'FAKE' | 'REAL';
+    confidence: number;
+    confidence_level: 'high' | 'medium' | 'low';
+    real_probability: number;
+    fake_probability: number;
+    model: string;
+    metadata?: Record<string, string | boolean>;
+    evidence?: string[];
+    heatmap?: string;
+}
+
+export async function analyzeMedia(file: File): Promise<MediaAnalysisResponse> {
+    const token = localStorage.getItem('token');
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await fetch(`${API_URL}/api/v1/analyze-media`, {
+        method: 'POST',
+        headers: {
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: formData,
+    });
+
+    if (response.status === 401) {
+        logout();
+        window.location.href = '/login';
+        throw new Error('Unauthorized');
+    }
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Media analysis failed');
     }
 
     return response.json();

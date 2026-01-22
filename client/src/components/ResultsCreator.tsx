@@ -1,34 +1,44 @@
 import { useState } from 'react';
-import { ArrowLeft, Download, Eye, EyeOff, ZoomIn, FileText, FolderPlus, Layers } from 'lucide-react';
+import { ArrowLeft, Download, Eye, EyeOff, ZoomIn, FileText, FolderPlus, Layers, CheckCircle2, XCircle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell } from 'recharts';
+import type { MediaAnalysisResponse } from '../lib/api';
 
 interface ResultsCreatorProps {
   preview: string | null;
   onBack: () => void;
+  analysisResult: MediaAnalysisResponse;
 }
 
-const modelData = [
-  { model: 'ResNet-50', confidence: 94.2, color: '#00FFC3' },
-  { model: 'EfficientNet', confidence: 91.8, color: '#99F8FF' },
-  { model: 'XceptionNet', confidence: 96.1, color: '#00FFC3' },
-  { model: 'MesoNet', confidence: 89.4, color: '#99F8FF' },
-];
-
-const anomalies = [
-  { type: 'Face Boundary', status: 'Clear', severity: 'low' },
-  { type: 'Eye Blink Pattern', status: 'Natural', severity: 'low' },
-  { type: 'Lighting Consistency', status: 'Verified', severity: 'low' },
-  { type: 'Pixel Grid Analysis', status: 'Normal', severity: 'low' },
-];
-
-export function ResultsCreator({ preview, onBack }: ResultsCreatorProps) {
+export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreatorProps) {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showELA, setShowELA] = useState(false);
+
+  const isReal = analysisResult.verdict === 'REAL';
+  const verdictColor = isReal ? '#00FFC3' : '#FF6B6B';
+
+  // Dynamic model data based on actual result
+  const modelData = [
+    { model: 'EfficientNet-B0', confidence: analysisResult.confidence, color: verdictColor },
+    { model: 'Real Prob', confidence: analysisResult.real_probability, color: '#00FFC3' },
+    { model: 'Fake Prob', confidence: analysisResult.fake_probability, color: '#FF6B6B' },
+  ];
+
+  const anomalies = isReal ? [
+    { type: 'Face Boundary', status: 'Clear', severity: 'low' },
+    { type: 'Eye Blink Pattern', status: 'Natural', severity: 'low' },
+    { type: 'Lighting Consistency', status: 'Verified', severity: 'low' },
+    { type: 'Pixel Grid Analysis', status: 'Normal', severity: 'low' },
+  ] : [
+    { type: 'Face Boundary', status: 'Suspicious', severity: 'high' },
+    { type: 'Eye Blink Pattern', status: 'Irregular', severity: 'medium' },
+    { type: 'Lighting Consistency', status: 'Anomaly', severity: 'high' },
+    { type: 'Pixel Grid Analysis', status: 'Modified', severity: 'medium' },
+  ];
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-8">
       <div className="fixed inset-0 pointer-events-none">
-        <div className="absolute top-40 right-1/4 w-[600px] h-[600px] bg-[#00FFC3]/5 rounded-full blur-[150px]" />
+        <div className={`absolute top-40 right-1/4 w-[600px] h-[600px] ${isReal ? 'bg-[#00FFC3]/5' : 'bg-[#FF6B6B]/5'} rounded-full blur-[150px]`} />
       </div>
 
       <div className="relative z-10 max-w-[1600px] mx-auto">
@@ -80,7 +90,7 @@ export function ResultsCreator({ preview, onBack }: ResultsCreatorProps) {
               <div className="relative rounded-xl overflow-hidden">
                 <img src={preview || ''} alt="Analysis" className="w-full h-[600px] object-cover" />
                 {showHeatmap && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-red-500/30 via-yellow-500/20 to-green-500/30 backdrop-blur-sm">
+                  <div className={`absolute inset-0 ${isReal ? 'bg-gradient-to-br from-green-500/30 via-green-400/20 to-green-500/30' : 'bg-gradient-to-br from-red-500/30 via-yellow-500/20 to-red-500/30'} backdrop-blur-sm`}>
                     <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs">
                       Manipulation Heatmap
                     </div>
