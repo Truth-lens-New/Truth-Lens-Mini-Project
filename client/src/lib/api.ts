@@ -262,6 +262,10 @@ export async function investigateClaim(content: string, inputType: 'text' | 'url
             errorMessage = errorData.detail;
         }
         throw new Error(errorMessage);
+    }
+
+    return await response.json();
+}
 // --- Media Analysis (Deepfake Detection) ---
 
 export interface MediaAnalysisResponse {
