@@ -23,6 +23,7 @@ class EvidenceType(str, Enum):
     KNOWN_MISINFO = "known_misinfo"
     WEB_SEARCH = "web_search"
     FACT_CHECK = "fact_check"
+    OFFICIAL_RECORD = "official_record"
 
 
 class Stance(str, Enum):
@@ -54,6 +55,7 @@ SOURCE_WEIGHTS = {
     EvidenceType.WEB_SEARCH: 0.7,
     EvidenceType.ARCHIVE: 0.7,
     EvidenceType.SOCIAL_MEDIA: 0.3,
+    EvidenceType.OFFICIAL_RECORD: 2.0,
 }
 
 
@@ -104,6 +106,10 @@ class EvidenceCollection:
     sources_checked: int = 0
     stopped_early: bool = False
     stop_reason: Optional[str] = None
+    override_verdict: Optional[str] = None # Verdict value if determined by strategy
+    override_confidence: Optional[float] = None
+    override_reason: Optional[str] = None
+    strategy_stats: Dict[str, any] = field(default_factory=dict)
     
     def add(self, item: EvidenceItem):
         """Add evidence item to collection."""
@@ -156,6 +162,7 @@ class VerifiedClaim:
     investigation_time_ms: int
     sources_checked: int
     verified_at: datetime = field(default_factory=datetime.now)
+    strategy_stats: Dict[str, any] = field(default_factory=dict)
     
     def to_dict(self) -> dict:
         """Convert to dictionary for API response."""
@@ -172,5 +179,6 @@ class VerifiedClaim:
             "evidence": [
                 e.to_dict() 
                 for e in self.evidence_items[:5]  # Top 5 evidence
-            ]
+            ],
+            "strategy_stats": self.strategy_stats
         }

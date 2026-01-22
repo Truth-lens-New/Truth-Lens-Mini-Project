@@ -109,7 +109,8 @@ class ClaimClassifier:
         'president', 'prime minister', 'politics', 'democrat', 'republican', 
         'legislation', 'law', 'government', 'policy', 'campaign', 'candidate',
         'biden', 'trump', 'modi', 'putin', 'white house', 'fraud', 'rigged',
-        'stolen', 'corruption', 'bribe', 'scandal'
+        'stolen', 'corruption', 'bribe', 'scandal', 'tax', 'economy', 'deficit',
+        'budget', 'inflation', 'recession', 'debt', 'spending', 'federal'
     ]
     
     def _create_checkable_boost(self, claim: RawClaim, claim_type: ClaimType) -> TypedClaim:
@@ -124,7 +125,8 @@ class ClaimClassifier:
             is_checkable=True,
             evidence_strategy=strategy,
             status="Pending evidence analysis",
-            sentence_index=claim.sentence_index
+            sentence_index=claim.sentence_index,
+            canonical_id=claim.canonical_id
         )
 
     def _classify_single(self, claim: RawClaim) -> TypedClaim:
@@ -203,7 +205,8 @@ class ClaimClassifier:
             is_checkable=is_checkable,
             evidence_strategy=strategy,
             status=status,
-            sentence_index=claim.sentence_index
+            sentence_index=claim.sentence_index,
+            canonical_id=claim.canonical_id
         )
     
     def _create_non_checkable(self, claim: RawClaim, claim_type: ClaimType) -> TypedClaim:
@@ -215,7 +218,8 @@ class ClaimClassifier:
             is_checkable=False,
             evidence_strategy=EVIDENCE_STRATEGIES.get(claim_type, "Not fact-checkable"),
             status=EVIDENCE_STRATEGIES.get(claim_type, "Not fact-checkable"),
-            sentence_index=claim.sentence_index
+            sentence_index=claim.sentence_index,
+            canonical_id=claim.canonical_id
         )
     
     def _is_likely_opinion(self, text: str) -> bool:

@@ -41,6 +41,17 @@ class ClaimType(str, Enum):
     UNKNOWN = "unknown"              # Catch-all for unclassifiable
 
 
+class TemporalState(str, Enum):
+    """
+    Time-based state of a claim.
+    """
+    STABILIZED = "stabilized"           # Consensus reached, verified long ago
+    DEVELOPING = "developing"           # New event, facts still emerging (< 24h)
+    CONTESTED = "contested"             # Long-running disagreement
+    HISTORICAL = "historical"           # From the distant past (> 1 year)
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class ProcessedInput:
     """
@@ -69,6 +80,7 @@ class RawClaim:
     char_start: int
     char_end: int
     is_assertion: bool = True
+    canonical_id: Optional[str] = None
 
 
 @dataclass
@@ -84,6 +96,7 @@ class TypedClaim:
     evidence_strategy: str
     status: str
     sentence_index: int = 0
+    canonical_id: Optional[str] = None
     
     def to_dict(self) -> dict:
         """Convert to dictionary for API response."""
@@ -93,8 +106,22 @@ class TypedClaim:
             "type_confidence": round(self.type_confidence, 3),
             "is_checkable": self.is_checkable,
             "evidence_strategy": self.evidence_strategy,
+            "is_checkable": self.is_checkable,
+            "evidence_strategy": self.evidence_strategy,
             "status": self.status
         }
+
+
+@dataclass
+class TemporalContext:
+    """
+    Time-aware context for a claim.
+    """
+    first_seen: Optional[datetime] = None
+    last_updated: Optional[datetime] = None
+    evidence_freshness_hours: Optional[float] = None
+    state: TemporalState = TemporalState.UNKNOWN
+    stability_score: float = 0.0  # 0.0 (Chaotic) to 1.0 (Fixed)
 
 
 # Evidence strategies per claim type (reference data)
