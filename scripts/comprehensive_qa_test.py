@@ -25,7 +25,7 @@ from typing import List, Dict, Any
 import httpx
 
 # Configuration
-BASE_URL = "http://localhost:7000"
+BASE_URL = "http://localhost:8000"
 API_URL = f"{BASE_URL}/api/v3/investigate"
 ANALYZE_URL = f"{BASE_URL}/api/v3/analyze"
 AUTH_URL = f"{BASE_URL}/auth"

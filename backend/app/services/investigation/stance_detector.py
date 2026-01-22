@@ -12,6 +12,12 @@ class StanceDetector:
     AI-powered Stance Detection
     """
     
+    DEBUNK_KEYWORDS = {
+        "myth", "hoax", "fake", "misconception", "fanciful", "false belief", 
+        "debunk", "refuted", "disproven", "fantasy", "legend", "urban legend",
+        "conspiracy theory", "incorrectly", "erroneously"
+    }
+
     def __init__(self):
         self.manager = get_model_manager()
         
@@ -19,32 +25,35 @@ class StanceDetector:
         """
         Detect stance of evidence towards claim using BART-Large-MNLI (Zero-Shot).
         
-        We construct 3 hypotheses and check which one the evidence entails:
-        1. Support: "The evidence supports the claim that {claim}"
-        2. Refute: "The evidence contradicts the claim that {claim}"
-        3. Neutral: "The evidence is unrelated to the claim that {claim}"
+        Now includes 'Discussing' label and Heuristic Guardrails for myths.
         """
         # Get model (Unified BART-Large-MNLI)
         classifier = self.manager.unified_model
         
-        # Construct dynamic labels/hypotheses
-        # We strip the claim to ensure it fits and doesn't have weird trailing chars
         clean_claim = claim_text.strip()
+        lower_evidence = evidence_text.lower()
         
-        # Labels are effectively the full hypotheses we want to test
-        label_support = f"supports the claim that {clean_claim}"
-        label_refute = f"contradicts the claim that {clean_claim}"
-        label_neutral = f"is unrelated to the claim {clean_claim}"
+        # --- Heuristic Guardrail: Debunk Detection ---
+        # If evidence mentions "myth", "hoax", etc., we should be very skeptical of "Support"
+        has_debunk_term = any(term in lower_evidence for term in self.DEBUNK_KEYWORDS)
         
-        candidate_labels = [label_support, label_refute, label_neutral]
+        # Construct dynamic labels/hypotheses
+        label_support = "true"
+        label_refute = "false"
+        label_neutral = "unrelated"
+        label_discuss = "discussing the myth" 
         
-        # Use a template that frames the evidence's relation to the claim
-        # Template: "This text {}." -> "This text supports the claim that X."
+        candidate_labels = [label_support, label_refute, label_neutral, label_discuss]
+        
+        # Refined Template: Separates the text's content from the claim's truth value
+        # "Based on this text, the claim 'X' is {true/false/unrelated/discussing}."
+        template = f"Based on this text, the claim '{clean_claim}' is {{}}."
+        
         try:
             result = classifier(
                 evidence_text, 
                 candidate_labels, 
-                hypothesis_template="This text {}.",
+                hypothesis_template=template,
                 multi_label=False
             )
             
@@ -54,17 +63,41 @@ class StanceDetector:
             support_score = scores.get(label_support, 0.0)
             refute_score = scores.get(label_refute, 0.0)
             neutral_score = scores.get(label_neutral, 0.0)
+            discuss_score = scores.get(label_discuss, 0.0)
+            
+            # --- Apply Guardrail Penalties ---
+            if has_debunk_term:
+                # If it's a debunking article, 'Support' effectively means 'Refutes' 
+                # or it's just discussing the myth.
+                # We massively penalize support and boost refute/discuss
+                print(f"  [Guardrail] Debunk term detected. Penalizing Support.")
+                refute_score += support_score * 0.8  # Shift support to refute
+                discuss_score += support_score * 0.2
+                support_score *= 0.0  # Nuke support
+            
+            # Re-normalize isn't strictly necessary for comparison, but clean for output
+            total = support_score + refute_score + neutral_score + discuss_score + 1e-9
+            support_score /= total
+            refute_score /= total
+            neutral_score /= total
+            discuss_score /= total
             
             # Determine Verdict
-            # We use a moderate threshold to capture signal from web snippets
             THRESHOLD = 0.40
             
-            if support_score > refute_score and support_score > neutral_score and support_score > THRESHOLD:
+            if support_score > THRESHOLD and support_score > refute_score and support_score > neutral_score and support_score > discuss_score:
                 label = "SUPPORTS"
                 final_score = support_score
-            elif refute_score > support_score and refute_score > neutral_score and refute_score > THRESHOLD:
+            elif refute_score > THRESHOLD and refute_score > support_score:
                 label = "REFUTES"
                 final_score = refute_score
+            elif discuss_score > THRESHOLD and discuss_score > support_score:
+                # discussing a myth without calling it true -> likely Refutes or Neutral context
+                # For safety, map 'Discussing' to NEUTRAL in the strict sense, 
+                # OR REFUTES if we are strict. Let's map to NEUTRAL-leaning-Refute.
+                # Actually, if it's "discussing a myth", it's effectively Neutral/Refutes.
+                label = "NEUTRAL" 
+                final_score = discuss_score
             else:
                 label = "NEUTRAL"
                 final_score = neutral_score
@@ -75,7 +108,8 @@ class StanceDetector:
                 "raw_scores": {
                     "support": support_score,
                     "refute": refute_score,
-                    "neutral": neutral_score
+                    "neutral": neutral_score,
+                    "discuss": discuss_score
                 }
             }
             

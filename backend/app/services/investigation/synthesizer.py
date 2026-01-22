@@ -70,6 +70,11 @@ class EvidenceSynthesizer:
             # Or just check everything? 
             # Strategy: If stance is NEUTRAL/Unset, check it.
             # If it came from a source that explicitly sets stance (like FactCheck), keep it.
+            # If it came from a source that explicitly sets stance (like FactCheck), keep it.
+            # CRITICAL FIX: Do NOT re-evaluate Official Records. Trust the strategy logic.
+            if item.source_type == EvidenceType.OFFICIAL_RECORD:
+                continue
+
             if item.stance == Stance.NEUTRAL or item.stance_confidence == 0.0:
                  # Check if text is long enough
                  if len(item.text.split()) > 3:
@@ -142,11 +147,21 @@ class EvidenceSynthesizer:
             EvidenceType.FACT_CHECK
         }
         
+        # --- VETO POWER Check ---
+        # If ANY authoritative source Refutes the claim, we trust it over random web snippets.
+        # This prevents "Green Cheese" style myths from being "Supported" by confused blogs.
         for item in items:
             if item.source_type in authoritative_types:
                 if item.stance == Stance.REFUTES:
-                    return Verdict.VERIFIED_FALSE, max(item.stance_confidence, 0.90)
-                elif item.stance == Stance.SUPPORTS:
+                    print(f"  [Veto] Authoritative source {item.source_domain} REFUTES this claim. Verdict: FALSE.")
+                    return Verdict.VERIFIED_FALSE, max(item.stance_confidence, 0.95)
+
+        # Standard authoritative check (if they Support)
+        for item in items:
+            if item.source_type in authoritative_types:
+                if item.stance == Stance.SUPPORTS:
+                     # If an auth source supports it, and we passed the Veto check (no auth refutes),
+                     # we can be fairly confident.
                     return Verdict.VERIFIED_TRUE, max(item.stance_confidence, 0.90)
         
         # Not enough evidence

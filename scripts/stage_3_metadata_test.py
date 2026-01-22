@@ -9,7 +9,7 @@ import json
 import time
 
 # Configuration
-API_URL = "http://localhost:7000"
+API_URL = "http://localhost:8000"
 AUTH_URL = f"{API_URL}/auth/login"
 
 def login():

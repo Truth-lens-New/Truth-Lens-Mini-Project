@@ -3,7 +3,8 @@ import { useMemo } from 'react';
 import { Brain, Search, Database, Shield, Zap, Globe } from 'lucide-react';
 
 interface NeuralStreamProps {
-    currentStep: string;
+    currentStep?: string;
+    isActive?: boolean;
 }
 
 const STEP_METADATA: Record<string, { label: string; color: string; icon: any }> = {
@@ -17,7 +18,7 @@ const STEP_METADATA: Record<string, { label: string; color: string; icon: any }>
     error: { label: 'System Halted', color: '#ef4444', icon: Zap },
 };
 
-export function NeuralStream({ currentStep }: NeuralStreamProps) {
+export function NeuralStream({ currentStep = 'idle' }: NeuralStreamProps) {
     const meta = STEP_METADATA[currentStep] || STEP_METADATA.idle;
 
     // Generate static particles for the background synapsis

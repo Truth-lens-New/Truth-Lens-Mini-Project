@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
     container_name: truthlens_db
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-truthlens}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-truthlens_secret}
@@ -12,6 +11,7 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-truthlens}" ]
       interval: 5s
@@ -21,6 +21,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: truthlens_pgadmin
+    restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@truthlens.com
       PGADMIN_DEFAULT_PASSWORD: admin123
@@ -36,34 +37,58 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     container_name: truthlens_backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-truthlens}:${POSTGRES_PASSWORD:-truthlens_secret}@postgres:5432/${POSTGRES_DB:-truthlens}
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
     env_file:
       - .env
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./backend:/app
-      - ./data:/app/data
+      - ./backend:/app:cached
+      - ./data:/app/data:cached
+      - backend_cache:/root/.cache
+    develop:
+      watch:
+        - action: sync
+          path: ./backend
+          target: /app
+          ignore:
+            - __pycache__/
+            - "*.pyc"
+        - action: rebuild
+          path: ./backend/requirements.txt
 
   client:
     build:
       context: ./client
       dockerfile: Dockerfile
     container_name: truthlens_client
+    restart: unless-stopped
     ports:
       - "5173:5173"
     environment:
       - VITE_API_URL=http://localhost:8000
+      - CHOKIDAR_USEPOLLING=true
     volumes:
-      - ./client:/app
+      - ./client:/app:cached
       - /app/node_modules
     depends_on:
       - backend
+    develop:
+      watch:
+        - action: sync
+          path: ./client/src
+          target: /app/src
+        - action: rebuild
+          path: ./client/package.json
 
 volumes:
   postgres_data:
   pgadmin_data:
+  backend_cache:

@@ -14,7 +14,8 @@ import {
 import type { V3VerifiedClaim, V3EvidenceItem, HistoryItem } from '../lib/api';
 import { investigateClaim } from '../lib/api';
 import { NeuralStream } from './NeuralStream';
-import { TruthSpectrum } from './TruthSpectrum';
+import { HybridTruthGauge } from './HybridTruthGauge';
+import { StrategyBadge } from './StrategyBadge';
 
 // === Types ===
 type InvestigationStep =
@@ -28,7 +29,7 @@ type InvestigationStep =
     | 'complete'
     | 'error';
 
-type VerdictType = 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable';
+type VerdictType = 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable' | 'developing';
 
 // === Constants ===
 const STEPS = [
@@ -49,6 +50,7 @@ const SOURCE_ICONS: Record<string, string> = {
     'news_article': '📰',
     'academic_paper': '🔬',
     'web_search': '🌐',
+    'official_record': '🏛️',
 };
 
 // === Helper Components ===
@@ -274,6 +276,14 @@ function EvidenceCard({ evidence, index }: { evidence: V3EvidenceItem; index: nu
                     </a>
                 )}
             </div>
+
+            {/* Visual indicator for official sources */}
+            {evidence.source_domain.endsWith('.gov.in') && (
+                <div className="absolute top-0 right-0 p-2 opacity-10 group-hover:opacity-100 transition-opacity">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/5/55/Emblem_of_India.svg" alt="Official" className="w-12 h-12 opacity-80" />
+                </div>
+            )}
+
         </motion.div>
     );
 }
@@ -397,9 +407,9 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
             label: 'VERIFIED FALSE'
         },
         disputed: {
-            gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+            gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #6366f1 100%)', // Split orange/indigo to show polarization
             icon: AlertTriangle,
-            label: 'DISPUTED'
+            label: 'DISPUTED TOPIC'
         },
         unverified: {
             gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
@@ -415,6 +425,11 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
             gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
             icon: AlertCircle,
             label: 'NOT CHECKABLE'
+        },
+        developing: {
+            gradient: 'linear-gradient(135deg, #f97316 0%, #dc2626 100%)',
+            icon: Zap, // Activity/Zap for breaking news
+            label: 'DEVELOPING STORY'
         },
     };
 
@@ -439,108 +454,141 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
                         style={{ background: v.gradient }}
                     />
 
-                    <div className="relative z-10 flex flex-col md:flex-row gap-8 md:gap-16 items-start">
-                        {/* Main Verdict Info */}
-                        <div className="flex-1 space-y-8">
-                            <div>
-                                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-6">
-                                    <Star className="w-3 h-3 text-white/60" />
-                                    <span className="text-xs font-medium text-white/60 uppercase tracking-widest">
-                                        AI Investigation Result
-                                    </span>
-                                </div>
-
-                                <div className="flex items-center gap-6 mb-2">
-                                    <div
-                                        className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3"
-                                        style={{ background: v.gradient }}
-                                    >
-                                        <Icon className="w-10 h-10 text-white" />
-                                    </div>
-                                    <h2
-                                        className="text-5xl md:text-6xl font-black tracking-tight"
-                                        style={{
-                                            background: v.gradient,
-                                            WebkitBackgroundClip: 'text',
-                                            WebkitTextFillColor: 'transparent',
-                                        }}
-                                    >
-                                        {v.label}
-                                    </h2>
-                                </div>
+                    <div className="relative z-10 flex flex-col gap-8">
+                        {/* NEW: Analyzed Claim Display */}
+                        <div className="relative pl-6 border-l-4 border-white/10 py-2">
+                            <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest mb-2">
+                                Analyzed Claim
                             </div>
+                            <p className="text-2xl md:text-3xl font-serif italic text-foreground/90 leading-relaxed">
+                                "{claim.original_text}"
+                            </p>
+                        </div>
 
-                            <div className="bg-white/5 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
-                                <div className="flex items-center justify-between mb-3">
-                                    <span className="text-sm font-medium text-muted-foreground/70">Confidence Level</span>
-                                    <span className="text-xl font-bold text-foreground">{confidence}%</span>
+                        <div className="flex flex-col md:flex-row gap-8 md:gap-16 items-start">
+                            {/* Main Verdict Info */}
+                            <div className="flex-1 space-y-8">
+                                <div>
+                                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 mb-6">
+                                        <Star className="w-3 h-3 text-white/60" />
+                                        <span className="text-xs font-medium text-white/60 uppercase tracking-widest">
+                                            AI Investigation Result
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-center gap-6 mb-2">
+                                        <div
+                                            className="w-20 h-20 rounded-2xl flex items-center justify-center shadow-lg transform -rotate-3"
+                                            style={{ background: v.gradient }}
+                                        >
+                                            <Icon className="w-10 h-10 text-white" />
+                                        </div>
+                                        <h2
+                                            className="text-5xl md:text-6xl font-black tracking-tight"
+                                            style={{
+                                                background: v.gradient,
+                                                WebkitBackgroundClip: 'text',
+                                                WebkitTextFillColor: 'transparent',
+                                            }}
+                                        >
+                                            {v.label}
+                                        </h2>
+                                    </div>
+
+                                    {/* Strategy Badge Integration */}
+                                    <div className="mt-4">
+                                        <StrategyBadge
+                                            claimType={claim.claim_type}
+                                            stats={claim.strategy_stats}
+                                        />
+                                    </div>
                                 </div>
-                                <div className="h-3 bg-muted/20 rounded-full overflow-hidden p-0.5">
-                                    <motion.div
-                                        initial={{ width: 0 }}
-                                        animate={{ width: `${confidence}%` }}
-                                        transition={{ duration: 1.5, ease: "easeOut" }}
-                                        className="h-full rounded-full shadow-lg"
-                                        style={{ background: v.gradient }}
+
+                                <div className="bg-white/5 rounded-2xl p-6 border border-white/5 backdrop-blur-sm">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <span className="text-sm font-medium text-muted-foreground/70">Confidence Level</span>
+                                        <span className="text-xl font-bold text-foreground">{confidence}%</span>
+                                    </div>
+                                    <div className="h-3 bg-muted/20 rounded-full overflow-hidden p-0.5">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${confidence}%` }}
+                                            transition={{ duration: 1.5, ease: "easeOut" }}
+                                            className="h-full rounded-full shadow-lg"
+                                            style={{ background: v.gradient }}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <p className="text-xl leading-relaxed text-foreground/80 font-light">
+                                        {/* Simple formatting for bold text if LLM provides markdown-like syntax */}
+                                        {claim.evidence_summary.split('**').map((part, i) =>
+                                            i % 2 === 1 ? <strong key={i} className="font-semibold text-foreground">{part}</strong> : part
+                                        )}
+                                    </p>
+                                </div>
+
+                                {/* Consensus Spectrum */}
+                                <div className="pt-4">
+                                    <HybridTruthGauge
+                                        score={
+                                            claim.verdict === 'verified_true' ? 0.7 + (0.3 * claim.confidence) :
+                                                claim.verdict === 'verified_false' ? 0.3 - (0.3 * claim.confidence) :
+                                                    claim.verdict === 'disputed' ? 0.5 :
+                                                        claim.verdict === 'developing' ? 0.5 + (0.1 * claim.confidence) :
+                                                            0.5
+                                        }
+                                        confidence={claim.confidence}
+                                        evidenceCount={claim.evidence.length}
                                     />
                                 </div>
                             </div>
 
-                            <p className="text-xl leading-relaxed text-foreground/80 font-light">
-                                {claim.evidence_summary}
-                            </p>
-
-                            {/* Consensus Spectrum */}
-                            <div className="pt-4">
-                                <TruthSpectrum
-                                    score={
-                                        claim.verdict === 'verified_true' ? 0.5 + (0.5 * claim.confidence) :
-                                            claim.verdict === 'verified_false' ? 0.5 - (0.5 * claim.confidence) :
-                                                0.5
-                                    }
-                                    confidence={claim.confidence}
-                                    evidenceCount={claim.evidence.length}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Quick Stats Column */}
-                        <div className="w-full md:w-72 space-y-4">
-                            <div className="group rounded-2xl p-5 transition-colors
+                            {/* Quick Stats Column */}
+                            <div className="w-full md:w-72 space-y-4">
+                                <div className="group rounded-2xl p-5 transition-colors
                                 bg-muted/30 hover:bg-muted/50 border border-border/50
                                 dark:bg-white/[0.03] dark:hover:bg-white/[0.06] dark:border-white/5">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="p-2 rounded-lg bg-blue-500/20">
-                                        <Database className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 rounded-lg bg-blue-500/20">
+                                            <Database className="w-4 h-4 text-blue-500 dark:text-blue-400" />
+                                        </div>
+                                        <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Sources Checked</div>
                                     </div>
-                                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Sources Checked</div>
+                                    <div className="text-3xl font-bold text-foreground pl-1">{claim.sources_checked}</div>
                                 </div>
-                                <div className="text-3xl font-bold text-foreground pl-1">{claim.sources_checked}</div>
-                            </div>
 
-                            <div className="group rounded-2xl p-5 transition-colors
+                                <div className="group rounded-2xl p-5 transition-colors
                                 bg-muted/30 hover:bg-muted/50 border border-border/50
                                 dark:bg-white/[0.03] dark:hover:bg-white/[0.06] dark:border-white/5">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="p-2 rounded-lg bg-emerald-500/20">
-                                        <Zap className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 rounded-lg bg-emerald-500/20">
+                                            <Zap className="w-4 h-4 text-emerald-500 dark:text-emerald-400" />
+                                        </div>
+                                        <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Speed</div>
                                     </div>
-                                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Speed</div>
+                                    <div className="text-3xl font-bold text-foreground pl-1">{claim.investigation_time_ms}ms</div>
                                 </div>
-                                <div className="text-3xl font-bold text-foreground pl-1">{claim.investigation_time_ms}ms</div>
-                            </div>
 
-                            <div className="group rounded-2xl p-5 transition-colors
+                                {claim.strategy_stats && (
+                                    // Hidden as per user request (Step 989)
+                                    // Data is still available in claim.strategy_stats for LLM context
+                                    <div className="hidden" />
+                                )}
+
+                                <div className="group rounded-2xl p-5 transition-colors
                                 bg-muted/30 hover:bg-muted/50 border border-border/50
                                 dark:bg-white/[0.03] dark:hover:bg-white/[0.06] dark:border-white/5">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <div className="p-2 rounded-lg bg-purple-500/20">
-                                        <Brain className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+                                    <div className="flex items-center gap-3 mb-2">
+                                        <div className="p-2 rounded-lg bg-purple-500/20">
+                                            <Brain className="w-4 h-4 text-purple-500 dark:text-purple-400" />
+                                        </div>
+                                        <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Category</div>
                                     </div>
-                                    <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Category</div>
-                                </div>
-                                <div className="text-lg font-bold text-foreground pl-1 capitalize truncate">
-                                    {claim.claim_type.replace(/_/g, ' ')}
+                                    <div className="text-lg font-bold text-foreground pl-1 capitalize truncate">
+                                        {claim.claim_type.replace(/_/g, ' ')}
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -658,6 +706,11 @@ export function InvestigationPage() {
             });
 
             setVerifiedClaims(claims);
+
+            // DEBUG: Log claims to check strategy_stats
+            console.log("[DEBUG] Verified Claims:", claims);
+            claims.forEach(c => console.log(`[DEBUG] Claim: ${c.claim_type}, Stats:`, c.strategy_stats));
+
             setActiveClaimIndex(0);
             setCurrentStep('complete');
         } catch (err) {

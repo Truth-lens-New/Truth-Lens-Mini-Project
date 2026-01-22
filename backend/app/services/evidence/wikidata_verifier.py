@@ -205,6 +205,62 @@ class WikidataVerifier:
         
         Returns None if pattern not recognized.
         """
+        # Pattern: "X is the first prime minister of Y"
+        first_pm_match = re.search(
+            r"(.+?)\s+is\s+the\s+first\s+prime\s+minister\s+of\s+(.+?)[\.\?]?$",
+            claim_text,
+            re.IGNORECASE
+        )
+        if first_pm_match:
+            person = first_pm_match.group(1).strip()
+            country = first_pm_match.group(2).strip()
+            
+            # Custom logic for "first PM"
+            # We want to find who the first PM of the country was.
+            # Convert "India" -> Q668. Property "head of government" (P6).
+            entity_id = await self._find_entity(country)
+            if not entity_id:
+                return None
+            
+            # SPARQL to get the first holder of P6 (Head of Govt) sorted by start time
+            # P6 is "head of government"
+            query = f"""
+            SELECT ?itemLabel WHERE {{
+              wd:{entity_id} p:P6 ?statement.
+              ?statement ps:P6 ?item.
+              ?statement pq:P580 ?startTime.
+              SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
+            }}
+            ORDER BY ?startTime
+            LIMIT 1
+            """
+            
+            async with httpx.AsyncClient() as client:
+                response = await client.get(
+                    self.WIKIDATA_ENDPOINT,
+                    params={"query": query, "format": "json"},
+                    headers={"Accept": "application/json", "User-Agent": "TruthLens/1.0"},
+                    timeout=self.timeout
+                )
+                if response.status_code == 200:
+                    data = response.json()
+                    bindings = data.get("results", {}).get("bindings", [])
+                    if bindings:
+                        actual_first_pm = bindings[0]["itemLabel"]["value"]
+                        
+                        # Compare
+                        verified = self._compare_values(person, actual_first_pm)
+                        return WikidataResult(
+                            verified=verified,
+                            actual_value=actual_first_pm,
+                            claimed_value=person,
+                            entity_id=entity_id,
+                            property_id="P6",
+                            source=f"Wikidata {entity_id} (First PM)",
+                            reason=f"Records show {actual_first_pm} was the first Prime Minister, not {person}." if not verified else "Verified against Wikidata records."
+                        )
+            return None
+
         # Pattern: "X is the capital of Y"
         capital_match = re.search(
             r"(.+?)\s+is\s+the\s+capital\s+of\s+(.+?)[\.\?]?$",
