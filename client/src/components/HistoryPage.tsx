@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, FileText, ChevronRight, Filter, Trash2, Clock, Loader2 } from 'lucide-react';
+import { Search, FileText, ChevronRight, Filter, Trash2, Clock, Loader2, Image as ImageIcon } from 'lucide-react';
 import { getHistory, deleteHistoryItem, clearAllHistory, type HistoryItem } from '../lib/api';
 import type { Page } from '../App';
 
@@ -184,7 +184,7 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
                                     >
                                         <div className="col-span-6 flex items-center gap-3">
                                             <div className="w-8 h-8 rounded-lg bg-purple-500/10 text-purple-400 flex items-center justify-center flex-shrink-0">
-                                                <FileText className="w-4 h-4" />
+                                                {(item.claim || '').startsWith('Deepfake Analysis') ? <ImageIcon className="w-4 h-4" /> : <FileText className="w-4 h-4" />}
                                             </div>
                                             <span className="truncate">{(item.claim || 'Unknown claim').slice(0, 80)}{(item.claim || '').length > 80 ? '...' : ''}</span>
                                         </div>
@@ -238,28 +238,30 @@ export function HistoryPage({ onNavigate }: HistoryPageProps) {
                                         </div>
 
                                         {/* View Full Analysis Button */}
-                                        <button
-                                            onClick={() => {
-                                                // Save selected item to localStorage for ArticleVerification to restore
-                                                localStorage.setItem('truthlens_current_result', JSON.stringify({
-                                                    claim: selectedItem.claim || '',
-                                                    result: {
-                                                        claim: selectedItem.claim,
-                                                        verdict: selectedItem.verdict,
-                                                        confidence: selectedItem.confidence,
-                                                        explanation: selectedItem.explanation,
-                                                        domain_trust: { domain: null, score: 'unknown' },
-                                                        factcheck: { found: false },
-                                                        evidence: [],
-                                                        stance_summary: { supports: 0, refutes: 0, discuss: 0, unrelated: 0 }
-                                                    }
-                                                }));
-                                                onNavigate?.('verify-article');
-                                            }}
-                                            className="w-full mt-4 py-3 rounded-xl bg-gradient-to-r from-[#99F8FF] to-[#00FFC3] text-black hover:shadow-[0_0_30px_rgba(0,255,195,0.3)] transition-all text-sm font-medium"
-                                        >
-                                            View Full Analysis
-                                        </button>
+                                        {!(selectedItem.claim || '').startsWith('Deepfake Analysis') && (
+                                            <button
+                                                onClick={() => {
+                                                    // Save selected item to localStorage for ArticleVerification to restore
+                                                    localStorage.setItem('truthlens_current_result', JSON.stringify({
+                                                        claim: selectedItem.claim || '',
+                                                        result: {
+                                                            claim: selectedItem.claim,
+                                                            verdict: selectedItem.verdict,
+                                                            confidence: selectedItem.confidence,
+                                                            explanation: selectedItem.explanation,
+                                                            domain_trust: { domain: null, score: 'unknown' },
+                                                            factcheck: { found: false },
+                                                            evidence: [],
+                                                            stance_summary: { supports: 0, refutes: 0, discuss: 0, unrelated: 0 }
+                                                        }
+                                                    }));
+                                                    onNavigate?.('verify-article');
+                                                }}
+                                                className="w-full mt-4 py-3 rounded-xl bg-gradient-to-r from-[#99F8FF] to-[#00FFC3] text-black hover:shadow-[0_0_30px_rgba(0,255,195,0.3)] transition-all text-sm font-medium"
+                                            >
+                                                View Full Analysis
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ) : (

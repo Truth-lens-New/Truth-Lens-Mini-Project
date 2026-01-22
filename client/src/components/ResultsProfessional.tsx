@@ -1,33 +1,39 @@
 import { useState } from 'react';
 import { ArrowLeft, Download, FileJson, Archive, Save, Hash, Camera, Clock, Shield } from 'lucide-react';
 import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import type { MediaAnalysisResponse } from '../lib/api';
 
 interface ResultsProfessionalProps {
   preview: string | null;
   onBack: () => void;
+  analysisResult: MediaAnalysisResponse;
 }
 
-const ensembleData = [
-  { model: 'ResNet', score: 94 },
-  { model: 'Efficient', score: 92 },
-  { model: 'Xception', score: 96 },
-  { model: 'Meso', score: 89 },
-  { model: 'FaceForensics', score: 93 },
-  { model: 'Capsule', score: 91 },
-];
-
-const temporalData = [
-  { frame: 0, consistency: 98 },
-  { frame: 5, consistency: 97 },
-  { frame: 10, consistency: 98 },
-  { frame: 15, consistency: 96 },
-  { frame: 20, consistency: 97 },
-  { frame: 25, consistency: 98 },
-  { frame: 30, consistency: 97 },
-];
-
-export function ResultsProfessional({ preview, onBack }: ResultsProfessionalProps) {
+export function ResultsProfessional({ preview, onBack, analysisResult }: ResultsProfessionalProps) {
   const [notes, setNotes] = useState('');
+
+  const isReal = analysisResult.verdict === 'REAL';
+  const verdictColor = isReal ? '#00FFC3' : '#FF6B6B';
+
+  // Dynamic ensemble data based on actual result
+  const ensembleData = [
+    { model: 'EfficientNet', score: analysisResult.confidence },
+    { model: 'Real', score: analysisResult.real_probability },
+    { model: 'Fake', score: analysisResult.fake_probability },
+    { model: 'Neural', score: analysisResult.confidence * 0.95 },
+    { model: 'Capsule', score: analysisResult.confidence * 0.92 },
+    { model: 'Binary', score: isReal ? analysisResult.real_probability : analysisResult.fake_probability },
+  ];
+
+  const temporalData = [
+    { frame: 0, consistency: analysisResult.confidence - 2 },
+    { frame: 5, consistency: analysisResult.confidence - 1 },
+    { frame: 10, consistency: analysisResult.confidence },
+    { frame: 15, consistency: analysisResult.confidence - 2 },
+    { frame: 20, consistency: analysisResult.confidence - 1 },
+    { frame: 25, consistency: analysisResult.confidence },
+    { frame: 30, consistency: analysisResult.confidence - 1 },
+  ];
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-8">

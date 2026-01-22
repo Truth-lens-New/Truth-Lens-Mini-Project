@@ -1,15 +1,39 @@
+# Core Framework
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Database
 sqlalchemy>=2.0.0
 asyncpg>=0.29.0
 alembic>=1.12.0
+
+# Authentication
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
 bcrypt>=4.0.0,<5.0.0  # Pin to 4.x - bcrypt 5.x enforces 72-byte limit strictly
-pydantic>=2.5.0
-pydantic-settings>=2.1.0
+
+# HTTP Client
 httpx>=0.25.0
+
+# NLP & AI
 spacy>=3.7.0
 google-generativeai>=0.3.0
+
+# File Uploads
 python-multipart>=0.0.6
+
+# Validation
 email-validator>=2.1.0
+
+# Image Processing
+pillow>=10.0.0
+opencv-python-headless>=4.8.0
+numpy>=1.24.0
+
+# Deepfake Detection (EfficientNet)
+timm>=1.0.0
+
+# PyTorch CPU-only (install separately with):
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
