@@ -16,6 +16,8 @@ from app.services.input import InputGateway
 from fastapi.concurrency import run_in_threadpool
 from app.services.extraction import ClaimExtractorV3
 from app.services.typing import ClaimClassifier
+from app.services.normalization.normalizer import get_normalizer
+from app.services.temporal.time_context import get_time_context_service
 
 # Database & Auth
 from fastapi import Depends
@@ -134,7 +136,23 @@ def analyze_content(request: AnalyzeRequestV3):
             )
         
         # Step 1: Process input
-        processed = input_gateway.process(input_type, request.content)
+        try:
+            processed = input_gateway.process(input_type, request.content)
+        except ValueError as e:
+            if "content cannot be empty" in str(e).lower():
+                # Handle empty input gracefully (Steel Strong UX)
+                return AnalyzeResponseV3(
+                    success=True,
+                    claims=[],
+                    metadata=AnalysisMetadata(
+                        input_type=input_type.value,
+                        processing_time_ms=int((time.time() - start_time) * 1000),
+                        claims_found=0,
+                        checkable_claims=0,
+                        analyzed_at=datetime.now()
+                    )
+                )
+            raise e
         
         # Step 2: Extract claims
         raw_claims = claim_extractor.extract(processed)
@@ -234,6 +252,8 @@ class VerifiedClaimResponse(BaseModel):
     sources_checked: int
     investigation_time_ms: int
     evidence: List[EvidenceResponse]
+    strategy_stats: Optional[dict] = None
+    temporal_context: Optional[dict] = None
 
 
 class InvestigateMetadata(BaseModel):
@@ -265,6 +285,8 @@ def get_verdict_engine_singleton():
     return _verdict_engine
 
 
+
+
 @router.post("/investigate", response_model=InvestigateResponseV3)
 async def investigate_content(
     request: InvestigateRequestV3,
@@ -289,6 +311,7 @@ async def investigate_content(
         # Get services
         input_gateway, claim_extractor, claim_classifier = get_services()
         verdict_engine = get_verdict_engine_singleton()
+        time_service = get_time_context_service()
         
         # Parse input type
         try:
@@ -304,15 +327,45 @@ async def investigate_content(
         
         # Step 2: Extract claims
         raw_claims = claim_extractor.extract(processed)
+
+        # === PHASE 4: INTELLIGENCE LAYER (Normalization) ===
+        normalizer = get_normalizer()
+        canonical_cache = {}
         
-        # Step 3: Type claims
-        typed_claims = claim_classifier.classify(raw_claims)
+        for claim in raw_claims:
+            # Normalize to canonical form
+            norm = normalizer.normalize(claim.text)
+            claim.canonical_id = norm['canonical_id']
+            
+            # Check for existing result
+            if norm['is_duplicate'] and norm.get('cached_result'):
+                print(f"🧠 Cache Hit! Duplicate claim found: {norm['canonical_id']}")
+                canonical_cache[norm['canonical_id']] = norm['cached_result']
+        # ===================================================
+        
+        # Step 3: Type claims (ML - CPU bound, run in threadpool)
+        typed_claims = await run_in_threadpool(claim_classifier.classify, raw_claims)
         
         # Step 4: Investigate each claim
         verified_claims = []
+        # Step 4: Investigate each claim
+        verified_claims = []
         for typed_claim in typed_claims:
-            # PHASE 2B: Fully Async - Non-blocking on event loop
-            result = await verdict_engine.verify(typed_claim)
+            # PHASE 4: Check Cache
+            cached_result = canonical_cache.get(typed_claim.canonical_id)
+            
+            if cached_result:
+                # Use cached result
+                result = cached_result
+                # Update text to match current request (optional, but keeps UI consistent)
+                # result.original_text = typed_claim.text 
+            else:
+                # PHASE 2B: Fully Async - Non-blocking on event loop
+                result = await verdict_engine.verify(typed_claim)
+                
+                # Update cache if meaningful result
+                if result.verdict.value != "not_checkable":
+                    normalizer.update_result(typed_claim.canonical_id, result)
             
             # Build evidence list for response
             evidence = [
@@ -327,6 +380,9 @@ async def investigate_content(
                 for e in result.evidence_items[:5]
             ]
             
+            # Prepare Temporal Context
+            time_ctx = time_service.analyze(result)
+            
             verified_claims.append(VerifiedClaimResponse(
                 original_text=result.original_text,
                 claim_type=result.claim_type,
@@ -336,7 +392,13 @@ async def investigate_content(
                 evidence_count=len(result.evidence_items),
                 sources_checked=result.sources_checked,
                 investigation_time_ms=result.investigation_time_ms,
-                evidence=evidence
+                evidence=evidence,
+                strategy_stats=result.strategy_stats,
+                temporal_context={
+                    "state": time_ctx.state.value,
+                    "freshness_hours": round(time_ctx.evidence_freshness_hours, 1) if time_ctx.evidence_freshness_hours else None,
+                    "stability": time_ctx.stability_score
+                }
             ))
 
             # --- Save to History (DB) ---

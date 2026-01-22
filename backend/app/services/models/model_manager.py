@@ -6,6 +6,7 @@ Singleton pattern to load ML models ONCE and reuse everywhere.
 
 import spacy
 from transformers import pipeline
+from sentence_transformers import SentenceTransformer
 
 
 class ModelManager:
@@ -14,8 +15,10 @@ class ModelManager:
     Loads all ML models once at startup, reuses everywhere.
     
     Models loaded:
+    Models loaded:
     1. spaCy (en_core_web_sm) - NLP processing
     2. BART-large-mnli - Zero-shot classification for claim typing
+    3. all-MiniLM-L6-v2 - Sentence embeddings for normalization
     """
     
     _instance = None
@@ -61,6 +64,12 @@ class ModelManager:
         # Alias for backward compatibility if needed, but better to access unified_model
         self.zero_shot = self.unified_model
         
+        
+        # 3. Semantic Embedding Model (Sentence Transformers)
+        # Used for Normalization and Deduplication
+        print("  🧬 Loading Semantic Embedding Model (all-MiniLM-L6-v2)...")
+        self.embedder = SentenceTransformer('all-MiniLM-L6-v2')
+        
         print("✅ Intelligence Engine Loaded.")
     
     @classmethod
@@ -74,6 +83,10 @@ class ModelManager:
         cls._instance = None
         cls._initialized = False
 
+
+    def get_embedding(self, text: str):
+        """Get semantic embedding for text."""
+        return self.embedder.encode(text)
 
 def get_model_manager() -> ModelManager:
     """Get the singleton model manager instance."""

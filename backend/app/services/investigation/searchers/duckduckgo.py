@@ -36,12 +36,17 @@ class DuckDuckGoSearcher:
         self.region = region
         self.safe_search = safe_search
     
-    async def search(self, query: str, max_results: int = 5) -> List[SearchResult]:
+    async def search(self, query: str, max_results: int = 5, time: Optional[str] = None) -> List[SearchResult]:
         """
         Perform a DuckDuckGo search (Async via threadpool).
         
         Since duckduckgo_search v8+ is synchronous, we offload to a thread
         to prevent blocking the event loop.
+        
+        Args:
+            query: Search query
+            max_results: Max number of results
+            time: Time filter ('d', 'w', 'm', 'y') or None
         """
         results = []
         retries = 3
@@ -49,9 +54,8 @@ class DuckDuckGoSearcher:
         for attempt in range(retries):
             try:
                 # Run sync DDGS in a thread
-                # ddgs.text returns a list of dicts
                 ddg_results = await asyncio.to_thread(
-                    self._run_sync_search, query, max_results
+                    self._run_sync_search, query, max_results, time
                 )
                 
                 # If we get here, it succeeded
@@ -91,14 +95,15 @@ class DuckDuckGoSearcher:
                     
         return results
 
-    def _run_sync_search(self, query: str, max_results: int):
+    def _run_sync_search(self, query: str, max_results: int, time: Optional[str] = None):
         """Helper to run sync search in thread."""
         with DDGS() as ddgs:
             return ddgs.text(
                 query,
                 region=self.region,
                 safesearch=self.safe_search,
-                max_results=max_results
+                max_results=max_results,
+                timelimit=time
             )
 
 

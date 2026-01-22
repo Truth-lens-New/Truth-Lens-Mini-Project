@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:7000';
+export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:7000';
 
 export interface User {
     id: string;
@@ -94,6 +94,10 @@ async function authFetch(url: string, options: RequestInit = {}) {
 
 // --- Auth ---
 
+export async function getUserStats(): Promise<any> {
+    return authFetch('/auth/me');
+}
+
 export async function login(data: { email?: string; password?: string }): Promise<AuthResponse> {
     const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
@@ -178,13 +182,15 @@ export interface V3EvidenceItem {
 export interface V3VerifiedClaim {
     original_text: string;
     claim_type: string;
-    verdict: 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable';
+    verdict: 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable' | 'developing';
     confidence: number;
     evidence_summary: string;
     evidence_count: number;
     sources_checked: number;
     investigation_time_ms: number;
     evidence: V3EvidenceItem[];
+    strategy_stats?: Record<string, any>;
+    evidence_strategy?: string;
 }
 
 export interface V3InvestigateResponse {

@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     google_factcheck_api_key: str = ""
     gnews_api_key: str = ""
+    groq_api_key: str = ""
     
     # CORS
     backend_cors_origins: str = '["http://localhost:5173","http://localhost:3000"]'

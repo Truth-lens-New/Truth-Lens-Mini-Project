@@ -21,7 +21,7 @@ import {
   HelpCircle,
 } from "lucide-react";
 import type { Page, UserMode } from "../App";
-import { getHistory, type HistoryItem } from "../lib/api";
+import { getHistory, getUserStats, type HistoryItem } from "../lib/api";
 
 interface DashboardProps {
   onNavigate: (page: Page) => void;
@@ -150,20 +150,13 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
 
   const fetchUserStats = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
+      if (!localStorage.getItem('token')) {
         setLoading(false);
         return;
       }
 
-      const response = await fetch('http://localhost:7000/auth/me', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStats(data);
-      }
+      const data = await getUserStats();
+      setStats(data);
     } catch (err) {
       console.error('Failed to fetch stats:', err);
     } finally {

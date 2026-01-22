@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.13-slim
 
 WORKDIR /app
 
@@ -11,6 +11,12 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python dependencies
 COPY requirements.txt .
+
+# 1. Install CPU-only PyTorch first (saves ~4GB)
+# This prevents pip from downloading the massive CUDA version from PyPI
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# 2. Install remaining dependencies (forcing CPU usage for ML libs)
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install PyTorch CPU

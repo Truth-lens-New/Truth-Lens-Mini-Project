@@ -16,6 +16,7 @@ from app.models.evidence import (
 from app.models.domain import TypedClaim, ClaimType
 from app.services.investigation.synthesizer import get_synthesizer
 from app.services.investigation.orchestrator import get_orchestrator
+from app.services.investigation.explanation import get_explanation_service
 
 
 class VerdictEngine:
@@ -37,6 +38,7 @@ class VerdictEngine:
     def __init__(self):
         self.orchestrator = get_orchestrator()
         self.synthesizer = get_synthesizer()
+        self.explanation_service = get_explanation_service()
     
     async def verify(self, claim: TypedClaim) -> VerifiedClaim:
         """
@@ -55,8 +57,7 @@ class VerdictEngine:
         # Gather evidence (Async)
         evidence = await self.orchestrator.investigate(claim)
         
-        # Handle no evidence case
-        if not evidence.items:
+        if not evidence.items and not evidence.override_verdict:
             return VerifiedClaim(
                 original_text=claim.text,
                 claim_type=claim.claim_type.value,
@@ -68,12 +69,47 @@ class VerdictEngine:
                 sources_checked=evidence.sources_checked
             )
         
+        # Check for Strategy Override (Phase 3)
+        if evidence.override_verdict:
+            # Map string verdict back to Enum if needed, usually it is Enum value
+            try:
+                final_verdict = Verdict(evidence.override_verdict)
+            except ValueError:
+                final_verdict = Verdict.UNVERIFIED
+            
+            verified_claim = VerifiedClaim(
+                original_text=claim.text,
+                claim_type=claim.claim_type.value,
+                verdict=final_verdict,
+                confidence=evidence.override_confidence or 0.0,
+                evidence_summary=evidence.override_reason or "Verdict determined by specialized strategy.",
+                evidence_items=evidence.items,
+                investigation_time_ms=evidence.investigation_time_ms,
+                sources_checked=evidence.sources_checked,
+                strategy_stats=evidence.strategy_stats
+            )
+            
+            # Enrich override verdict too
+            try:
+                enriched_summary = await self.explanation_service.generate_explanation(verified_claim)
+                verified_claim.evidence_summary = enriched_summary
+            except Exception as e:
+                print(f"Explanation enrichment failed: {e}")
+                
+            return verified_claim
+            
         # Synthesize evidence into verdict (Sync is fine, it's fast CPU work)
-        verdict, confidence, summary = self.synthesizer.synthesize(
-            evidence, claim.text
+        # UPDATE: It is NOT fast if ML is involved. Use threadpool to avoid blocking loop.
+        from fastapi.concurrency import run_in_threadpool
+        
+        verdict, confidence, summary = await run_in_threadpool(
+            self.synthesizer.synthesize,
+            evidence, 
+            claim.text
         )
         
-        return VerifiedClaim(
+        # Baseline VerifiedClaim
+        verified_claim = VerifiedClaim(
             original_text=claim.text,
             claim_type=claim.claim_type.value,
             verdict=verdict,
@@ -81,8 +117,20 @@ class VerdictEngine:
             evidence_summary=summary,
             evidence_items=evidence.items,
             investigation_time_ms=evidence.investigation_time_ms,
-            sources_checked=evidence.sources_checked
+            sources_checked=evidence.sources_checked,
+            strategy_stats=evidence.strategy_stats
         )
+
+        # PHASE 4: LLM Explanation Enrichment
+        # This replaces the robotic synthesizer summary with human-readable text
+        try:
+            enriched_summary = await self.explanation_service.generate_explanation(verified_claim)
+            verified_claim.evidence_summary = enriched_summary
+        except Exception as e:
+            print(f"Explanation enrichment failed: {e}")
+            # Fallback to original summary if LLM fails
+        
+        return verified_claim
     
     def _create_not_checkable_result(self, claim: TypedClaim) -> VerifiedClaim:
         """Create result for non-checkable claims (opinions, predictions, etc)."""

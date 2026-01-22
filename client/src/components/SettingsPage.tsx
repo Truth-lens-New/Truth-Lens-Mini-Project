@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getUserStats } from '../lib/api';
 import { User, Shield, LogOut, Loader2, Calendar, BarChart3, Settings } from 'lucide-react';
 import type { Page } from '../App';
 
@@ -25,24 +26,13 @@ export function SettingsPage({ onLogout }: SettingsPageProps) {
 
   const fetchProfile = async () => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
+      if (!localStorage.getItem('token')) {
         setError('Not authenticated');
         setLoading(false);
         return;
       }
 
-      const response = await fetch('http://localhost:7000/auth/me', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch profile');
-      }
-
-      const data = await response.json();
+      const data = await getUserStats();
       setProfile(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error');
