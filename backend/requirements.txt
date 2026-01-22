@@ -27,13 +27,14 @@ python-multipart>=0.0.6
 # Validation
 email-validator>=2.1.0
 
-# Image Processing
-pillow>=10.0.0
-opencv-python-headless>=4.8.0
-numpy>=1.24.0
+# Phase 1 ML Dependencies
+transformers>=4.36.0
+torch>=2.1.0
+sentence-transformers>=2.2.2
+trafilatura>=1.6.0
+easyocr>=1.7.1
 
-# Deepfake Detection (EfficientNet)
-timm>=1.0.0
-
-# PyTorch CPU-only (install separately with):
-# pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# Phase 2B Dependencies
+ddgs
+bcrypt<4.0.0
+passlib[bcrypt]>=4.0.0

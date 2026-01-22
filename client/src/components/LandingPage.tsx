@@ -10,55 +10,7 @@ interface LandingPageProps {
 export function LandingPage({ onNavigate, isAuthenticated, onLogout }: LandingPageProps) {
   return (
     <div className="min-h-screen relative overflow-hidden">
-      {/* Navbar */}
-      <nav className="absolute top-0 left-0 right-0 z-50 px-8 py-4">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          {/* Logo */}
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00FFC3] to-[#99F8FF] flex items-center justify-center">
-              <span className="text-black font-bold text-sm">TL</span>
-            </div>
-            <span className="text-lg font-medium">TruthLens</span>
-          </div>
-
-          {/* Auth Buttons */}
-          <div className="flex items-center gap-4">
-            {isAuthenticated ? (
-              <>
-                <button
-                  onClick={() => onNavigate('dashboard')}
-                  className="px-4 py-2 text-sm text-[#D6D6D6] hover:text-white transition-colors"
-                >
-                  Dashboard
-                </button>
-                <button
-                  onClick={onLogout}
-                  className="px-4 py-2 text-sm rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-all"
-                >
-                  Sign Out
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => onNavigate('login')}
-                  className="px-4 py-2 text-sm text-[#D6D6D6] hover:text-white transition-colors flex items-center gap-2"
-                >
-                  <LogIn className="w-4 h-4" />
-                  Sign In
-                </button>
-                <button
-                  onClick={() => onNavigate('register')}
-                  className="px-4 py-2 text-sm rounded-lg bg-gradient-to-r from-[#00FFC3] to-[#99F8FF] text-black hover:shadow-[0_0_20px_rgba(0,255,195,0.3)] transition-all flex items-center gap-2"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Sign Up
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-      </nav>
+      {/* Navbar Removed (Using Global Navigation) */}
       {/* Atmospheric Background */}
       <div className="absolute inset-0 z-0">
         {/* Base gradient */}

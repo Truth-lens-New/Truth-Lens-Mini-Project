@@ -13,6 +13,7 @@ from app.core.database import init_db
 from app.api.auth.auth import router as auth_router
 from app.api.v1.analyze import router as analyze_router
 from app.api.v1.history import router as history_router
+from app.api.v3.router import router as v3_router  # V3 Phase 1
 
 
 @asynccontextmanager
@@ -49,6 +50,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(analyze_router)
 app.include_router(history_router)
+app.include_router(v3_router)  # V3 Phase 1 routes
 
 
 @app.get("/")
