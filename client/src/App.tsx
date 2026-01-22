@@ -117,11 +117,7 @@ function AppContent() {
           <Route path="/login" element={<LoginPage onNavigate={handleNavigate} onLogin={handleLogin} />} />
           <Route path="/register" element={<RegisterPage onNavigate={handleNavigate} onLogin={handleLogin} />} />
           <Route path="/dashboard" element={<Dashboard onNavigate={handleNavigate} userMode={userMode} />} />
-          <Route path="/verify-media" element={
-            <ComingSoonOverlay title="Media Verification">
-              <ImageVideoUpload userMode={userMode} />
-            </ComingSoonOverlay>
-          } />
+          <Route path="/verify-media" element={<ImageVideoUpload userMode={userMode} />} />
           <Route path="/verify-article" element={<ArticleVerification userMode={userMode} onNavigate={handleNavigate} isAuthenticated={authenticated} />} />
           <Route path="/investigate" element={<InvestigationPage />} />
           <Route path="/history" element={<HistoryPage onNavigate={handleNavigate} />} />
