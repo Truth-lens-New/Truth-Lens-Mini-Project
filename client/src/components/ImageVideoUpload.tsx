@@ -120,6 +120,13 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
           <p className="text-muted-foreground">Upload an image or video for forensic analysis</p>
         </div>
 
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center gap-3 text-red-500">
+            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+            <p>{error}</p>
+          </div>
+        )}
+
         {processing ? (
           // Processing Screen
           <div className="p-12 rounded-3xl backdrop-blur-md bg-gradient-to-br from-card/80 to-card/40 border border-border/50">
@@ -199,11 +206,19 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
 
               <div className="relative flex items-start gap-6">
                 <div className="flex-1">
-                  <img
-                    src={preview}
-                    alt="Preview"
-                    className="w-full h-80 object-cover rounded-xl"
-                  />
+                  {file.type.startsWith('video/') ? (
+                    <video
+                      src={preview}
+                      controls
+                      className="w-full h-80 object-cover rounded-xl"
+                    />
+                  ) : (
+                    <img
+                      src={preview}
+                      alt="Preview"
+                      className="w-full h-80 object-cover rounded-xl"
+                    />
+                  )}
                 </div>
                 <div className="flex-1 space-y-4">
                   <div>
@@ -215,7 +230,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
                     <div className="text-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
                   </div>
                   <div>
-                    <div className="text-sm text-[#D6D6D6] mb-1">Type</div>
+                    <div className="text-sm text-muted-foreground mb-1">Type</div>
                     <div>{file.type.includes('video') ? 'Video' : 'Image'}</div>
                   </div>
 
@@ -247,7 +262,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
             onDragLeave={handleDrag}
             onDragOver={handleDrag}
             onDrop={handleDrop}
-            className={`p-20 rounded-3xl backdrop-blur-md bg-gradient-to-br from-white/10 to-white/5 border-2 border-dashed transition-all relative overflow-hidden ${dragActive ? 'border-[#00FFC3] bg-[#00FFC3]/5' : 'border-white/20'
+            className={`p-20 rounded-3xl backdrop-blur-md bg-gradient-to-br from-card/30 to-card/10 border-2 border-dashed transition-all relative overflow-hidden ${dragActive ? 'border-primary bg-primary/5' : 'border-border/50'
               }`}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-[#00FFC3]/5 via-transparent to-[#99F8FF]/5 opacity-50" />
@@ -258,7 +273,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
               </div>
 
               <h2 className="text-2xl mb-3">Drop your media here</h2>
-              <p className="text-[#D6D6D6] mb-6">or click to browse files</p>
+              <p className="text-muted-foreground mb-6">or click to browse files</p>
 
               <input
                 type="file"
@@ -275,7 +290,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
                 <span>Select Image</span>
               </label>
 
-              <div className="mt-8 flex items-center justify-center gap-6 text-xs text-[#666]">
+              <div className="mt-8 flex items-center justify-center gap-6 text-xs text-muted-foreground">
                 <div className="flex items-center gap-2">
                   <Image className="w-4 h-4" />
                   <span>JPG, PNG</span>
