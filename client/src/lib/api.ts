@@ -239,7 +239,7 @@ export async function analyzeClaimV3(text: string): Promise<V3AnalyzeResponse> {
 /**
  * Investigate a claim using V3 pipeline - full evidence gathering and verdict
  */
-export async function investigateClaim(content: string, inputType: 'text' | 'url' = 'text'): Promise<V3InvestigateResponse> {
+export async function investigateClaim(content: string, inputType: 'text' | 'url' | 'image' = 'text'): Promise<V3InvestigateResponse> {
     const token = localStorage.getItem('token');
     const headers: HeadersInit = {
         'Content-Type': 'application/json',

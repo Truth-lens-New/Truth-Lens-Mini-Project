@@ -20,8 +20,16 @@ class StanceDetector:
 
     def __init__(self):
         self.manager = get_model_manager()
-        
+
+    async def detect_async(self, claim_text: str, evidence_text: str) -> dict:
+        """
+        Async wrapper for detect() to avoid blocking the event loop.
+        """
+        from starlette.concurrency import run_in_threadpool
+        return await run_in_threadpool(self.detect, claim_text, evidence_text)
+
     def detect(self, claim_text: str, evidence_text: str) -> dict:
+
         """
         Detect stance of evidence towards claim using BART-Large-MNLI (Zero-Shot).
         

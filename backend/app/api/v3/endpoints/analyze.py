@@ -326,7 +326,11 @@ async def investigate_content(
         processed = input_gateway.process(input_type, request.content)
         
         # Step 2: Extract claims
-        raw_claims = claim_extractor.extract(processed)
+        # Use Smart/Crux extraction for URLs (long content) to avoid noise
+        if input_type == InputType.URL:
+             raw_claims = claim_extractor.extract_crux(processed)
+        else:
+             raw_claims = claim_extractor.extract(processed)
 
         # === PHASE 4: INTELLIGENCE LAYER (Normalization) ===
         normalizer = get_normalizer()
@@ -347,18 +351,15 @@ async def investigate_content(
         typed_claims = await run_in_threadpool(claim_classifier.classify, raw_claims)
         
         # Step 4: Investigate each claim
-        verified_claims = []
-        # Step 4: Investigate each claim
-        verified_claims = []
-        for typed_claim in typed_claims:
+        # Step 4: Investigate each claim (PARALLEL EXECUTION)
+        import asyncio
+
+        async def process_single_claim(typed_claim):
             # PHASE 4: Check Cache
             cached_result = canonical_cache.get(typed_claim.canonical_id)
             
             if cached_result:
-                # Use cached result
                 result = cached_result
-                # Update text to match current request (optional, but keeps UI consistent)
-                # result.original_text = typed_claim.text 
             else:
                 # PHASE 2B: Fully Async - Non-blocking on event loop
                 result = await verdict_engine.verify(typed_claim)
@@ -383,7 +384,7 @@ async def investigate_content(
             # Prepare Temporal Context
             time_ctx = time_service.analyze(result)
             
-            verified_claims.append(VerifiedClaimResponse(
+            verified_claim = VerifiedClaimResponse(
                 original_text=result.original_text,
                 claim_type=result.claim_type,
                 verdict=result.verdict.value,
@@ -399,7 +400,19 @@ async def investigate_content(
                     "freshness_hours": round(time_ctx.evidence_freshness_hours, 1) if time_ctx.evidence_freshness_hours else None,
                     "stability": time_ctx.stability_score
                 }
-            ))
+            )
+            
+            # Return both for processing
+            return verified_claim, result
+
+        # Execute all investigations in parallel
+        tasks = [process_single_claim(tc) for tc in typed_claims]
+        results_list = await asyncio.gather(*tasks)
+        
+        verified_claims = []
+        
+        for v_claim, result in results_list:
+            verified_claims.append(v_claim)
 
             # --- Save to History (DB) ---
             if result.verdict.value != "not_checkable":
@@ -412,7 +425,7 @@ async def investigate_content(
                     input_text_val = request.content if request.input_type == "text" else None
                     input_url_val = request.content if request.input_type == "url" else None
 
-                    # Create DB record
+                    # Create DB record - Add to session but don't commit yet
                     db_check = Check(
                         user_id=current_user["user_id"],
                         input_text=input_text_val,

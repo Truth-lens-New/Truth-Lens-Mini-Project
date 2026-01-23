@@ -33,11 +33,36 @@ class PoliticalStrategy(InvestigationStrategy):
         "bbc.com": "CENTER",
     }
     
-    OFFICIAL_DOMAINS = [".gov", ".gov.in", ".nic.in", ".org.in", "loc.gov", "whitehouse.gov"]
+    # Domain sets by region
+    DOMAINS_INDIA = [".gov.in", ".nic.in", ".org.in"]
+    DOMAINS_US = [".gov", "whitehouse.gov", "loc.gov", "senate.gov", "house.gov"]
+    DOMAINS_UK = [".gov.uk", "parliament.uk"]
+    
+    # Default fallback
+    DOMAINS_DEFAULT = [".gov", ".gov.in", ".gov.uk"]
 
     def __init__(self):
         self.searcher = get_duckduckgo_searcher()
         self.wikidata_verifier = get_wikidata_verifier()
+        
+    def _get_target_domains(self, claim_text: str) -> List[str]:
+        """Detect region from claim text and return relevant official domains."""
+        text = claim_text.lower()
+        
+        # Simple keyword heuristics
+        if any(w in text for w in ["india", "modi", "bjp", "congress", "delhi", "mumbai"]):
+            return self.DOMAINS_INDIA
+        if any(w in text for w in ["us", "usa", "america", "biden", "trump", "white house", "senate", "congress"]):
+            # Note: "congress" is tricky as it exists in both, but usually implies US in global context or check context
+            # We can enable both if ambiguous, but let's prioritize US for "congress" if "india" is absent
+            if "india" not in text and "bjp" not in text:
+                return self.DOMAINS_US
+            return self.DOMAINS_INDIA + self.DOMAINS_US
+            
+        if any(w in text for w in ["uk", "britain", "london", "parliament"]):
+            return self.DOMAINS_UK
+            
+        return self.DOMAINS_DEFAULT
         
     async def execute(self, ctx: InvestigationContext) -> InvestigationResult:
         evidence_collection = EvidenceCollection()
@@ -70,22 +95,28 @@ class PoliticalStrategy(InvestigationStrategy):
              )
 
         # 1. Official Record Search
-        # Try to find primary source documents
-        official_query = f"{ctx.claim.text} site:.gov OR site:.gov.in"
+        target_domains = self._get_target_domains(ctx.claim.text)
+        
+        # Construct query: "claim site:d1 OR site:d2 ..."
+        site_operators = " OR ".join([f"site:{d}" for d in target_domains])
+        official_query = f"{ctx.claim.text} {site_operators}"
+        
+        logger.info(f"Searching official records with query: {official_query}")
         official_results = await self.searcher.search(official_query, max_results=3)
         
         has_official_record = False
         
         for res in official_results:
             domain = res.source_domain
-            if any(domain.endswith(tld) for tld in self.OFFICIAL_DOMAINS):
+            # Double check domain match (search engine might be fuzzy)
+            if any(domain.endswith(tld) or tld in domain for tld in target_domains):
                 item = EvidenceItem(
                     text=res.snippet,
                     source_url=res.url,
                     source_domain=domain,
-                    source_type=EvidenceType.OFFICIAL_RECORD, # Need to ensure this exists or use suitable type
-                    stance=Stance.NEUTRAL, # Will update with synthesizer if needed, assume Support/Refute logic later
-                    stance_confidence=1.0,
+                    source_type=EvidenceType.OFFICIAL_RECORD, 
+                    stance=Stance.NEUTRAL, # We don't know yet without reading
+                    stance_confidence=0.5, # Low confidence on stance without reading
                     trust_score=100
                 )
                 evidence_collection.add(item)
@@ -123,20 +154,17 @@ class PoliticalStrategy(InvestigationStrategy):
 
         # 3. Verdict Logic
         
-        # A. Official Record Overrides All
+        # A. Official Record Found
         if has_official_record:
-            # In a real impl, we'd run stance detection on the official doc.
-            # Here we act as a placeholder logic: presence of official doc suggests it's a matter of record.
-            # We need to read the snippet to know if it confirms or denies.
-            # For MVP: Return "Verifiable Data Found" -> Let human review or Synthesizer handle.
-            # We'll mark as Unverified but with High Confidence in Evidence.
-            # Actually, let's just return UNVERIFIED (let synthesizer decide) but with specific reason.
+            # We found records, but haven't analyzed them.
+            # Return UNVERIFIED but with LOW confidence so Synthesizer can take over.
+            # (Previously was 0.9, blocking synthesizer)
             return InvestigationResult(
                 verdict=Verdict.UNVERIFIED, 
-                confidence_score=0.9,
+                confidence_score=0.4, # Allow synthesizer to override if it can read the text
                 evidence=evidence_collection,
-                reason="Official government records found. See evidence details.",
-                strategy_stats={"official_sources": len(official_results)}
+                reason="Official records found but require content analysis.",
+                strategy_stats={"official_sources": len(official_results), "region_detected": str(target_domains)}
             )
 
         # B. Polarization Check
@@ -157,8 +185,8 @@ class PoliticalStrategy(InvestigationStrategy):
         # C. Default
         return InvestigationResult(
             verdict=Verdict.UNVERIFIED,
-            confidence_score=0.5,
+            confidence_score=0.3, # Low confidence default
             evidence=evidence_collection,
-            reason="Standard political analysis completed.",
+            reason="Standard political analysis completed. Insufficient conclusive evidence.",
             strategy_stats={"polarization": "LOW"}
         )

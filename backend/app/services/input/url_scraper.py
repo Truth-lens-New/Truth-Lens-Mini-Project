@@ -30,10 +30,21 @@ class URLScraper:
         if not parsed.scheme or not parsed.netloc:
             raise ValueError(f"Invalid URL: {url}")
         
-        # Fetch content
-        downloaded = trafilatura.fetch_url(url)
-        if not downloaded:
-            raise ValueError(f"Could not fetch URL: {url}")
+        # Custom headers to avoid 403 blocks
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+        }
+
+        try:
+            import requests
+            response = requests.get(url, headers=headers, timeout=15)
+            response.raise_for_status()
+            downloaded = response.text
+        except Exception as e:
+            # Fallback to trafilatura fetch if requests fails (though unlikely to help if blocked)
+            downloaded = trafilatura.fetch_url(url)
+            if not downloaded:
+                 raise ValueError(f"Could not fetch URL: {url} (Error: {str(e)})")
         
         # Extract main text content
         text = trafilatura.extract(downloaded)

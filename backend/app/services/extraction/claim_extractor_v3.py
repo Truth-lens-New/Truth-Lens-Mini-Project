@@ -28,6 +28,15 @@ class ClaimExtractorV3:
     
     def __init__(self):
         self.models = get_model_manager()
+        # Lazy load CruxExtractor to prevent circular imports or init issues
+        self._crux_extractor = None
+
+    @property
+    def crux_extractor(self):
+        if self._crux_extractor is None:
+            from app.services.extraction.crux_extractor import CruxExtractor
+            self._crux_extractor = CruxExtractor()
+        return self._crux_extractor
     
     def extract(self, processed_input: ProcessedInput) -> List[RawClaim]:
         """
@@ -74,6 +83,23 @@ class ClaimExtractorV3:
                     claims.append(claim)
         
         return claims
+
+    def extract_crux(self, processed_input: ProcessedInput) -> List[RawClaim]:
+        """
+        Extract core 'Crux' claims using LLM Synthesis.
+        Falls back to standard extraction if LLM fails or is disabled.
+        """
+        # 1. Try LLM Extraction
+        try:
+            if self.crux_extractor.enabled:
+                claims = self.crux_extractor.extract(processed_input.text)
+                if claims:
+                    return claims
+        except Exception as e:
+            print(f"Crux extraction failed, falling back: {e}")
+            
+        # 2. Fallback to Standard Extraction (but maybe limit it?)
+        return self.extract(processed_input)
 
     def _split_compound_sentence(self, sent) -> List[str]:
         """

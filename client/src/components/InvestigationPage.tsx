@@ -1,11 +1,11 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
     CheckCircle2, XCircle, AlertTriangle,
     Globe, Database, FileSearch, Brain, Shield, Zap,
     ExternalLink, AlertCircle, Loader2, RotateCcw, Lightbulb,
-    ChevronRight, BarChart3, Link as LinkIcon, Star
+    ChevronRight, BarChart3, Link as LinkIcon, Star, Camera, Image as ImageIcon, X, Upload, Sparkles
 } from 'lucide-react';
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -52,6 +52,13 @@ const SOURCE_ICONS: Record<string, string> = {
     'web_search': '🌐',
     'official_record': '🏛️',
 };
+
+const FACTS = [
+    "Did you know? Humans typically take 45+ minutes to verify a complex claim.",
+    "TruthLens uses 4 different AI models to cross-reference bias.",
+    "We prioritize primary sources like government reports and academic papers.",
+    "Complex claims often require checking 15+ independent sources."
+];
 
 // === Helper Components ===
 
@@ -630,6 +637,67 @@ export function InvestigationPage() {
     const [activeClaimIndex, setActiveClaimIndex] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [isArchived, setIsArchived] = useState(false);
+    const [selectedImage, setSelectedImage] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Trivia 2.0 State (Viewport Edition)
+    const [fact, setFact] = useState<string | null>(null);
+    const [factStyle, setFactStyle] = useState<React.CSSProperties>({});
+    const [factAlign, setFactAlign] = useState<'left' | 'right'>('left');
+
+    const isInvestigating = currentStep !== 'idle' && currentStep !== 'complete' && currentStep !== 'error';
+
+    // Cycle Facts in Safe Viewport Gutters
+    useEffect(() => {
+        if (currentStep === 'searching_web' || currentStep === 'analyzing_stance') {
+            const showNewFact = () => {
+                const randomFact = FACTS[Math.floor(Math.random() * FACTS.length)];
+
+                // TL or TR only to avoid bottom UI elements
+                const corners = ['TL', 'TR'];
+                const corner = corners[Math.floor(Math.random() * corners.length)];
+
+                let style: React.CSSProperties = { position: 'fixed', zIndex: 100 };
+                let align: 'left' | 'right' = 'left';
+
+                const vEdge = Math.floor(10 + Math.random() * 8) + 'vh';
+                const hEdge = '5vw';
+
+                switch (corner) {
+                    case 'TL':
+                        style = { ...style, top: vEdge, left: hEdge };
+                        align = 'left';
+                        break;
+                    case 'TR':
+                        style = { ...style, top: vEdge, right: hEdge };
+                        align = 'right';
+                        break;
+                }
+
+                setFactStyle(style);
+                setFactAlign(align);
+                setFact(randomFact);
+            };
+
+            showNewFact();
+            const interval = setInterval(showNewFact, 7000);
+
+            return () => {
+                clearInterval(interval);
+                setFact(null);
+            };
+        } else {
+            setFact(null);
+        }
+    }, [currentStep]);
+
+    // Clear selected image when user types
+    useEffect(() => {
+        if (inputText) {
+            setSelectedImage(null);
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    }, [inputText]);
 
     // Auto-detect URL
     const isUrl = useMemo(() => {
@@ -682,19 +750,60 @@ export function InvestigationPage() {
         setCompletedSteps([]);
 
         // Determine input type
-        const autoIsUrl = textToUse.trim().startsWith('http://') || textToUse.trim().startsWith('https://'); // Recalculate for potential manual input
-        const inputType = autoIsUrl ? 'url' : 'text';
-        const apiPromise = investigateClaim(textToUse, inputType);
+        let inputType: 'text' | 'url' | 'image' = 'text';
+        let contentToUse = textToUse;
 
-        // Animate through steps
-        for (const step of STEPS) {
+        if (selectedImage) {
+            inputType = 'image';
+            contentToUse = selectedImage;
+        } else {
+            const autoIsUrl = textToUse.trim().match(/^(http|https):\/\/[^ "]+$/);
+            inputType = autoIsUrl ? 'url' : 'text';
+        }
+
+        // --- 1. Start API Request (Async) ---
+        const apiPromise = investigateClaim(contentToUse, inputType);
+
+        // --- 2. Animate Pre-Processing Steps (Fast) ---
+        // We move through these quickly as they are essentially "setup" steps
+        const preSteps = ['extracting', 'checking_misinfo', 'checking_wikidata'];
+
+        for (const stepId of preSteps) {
+            const step = STEPS.find(s => s.id === stepId);
+            if (!step) continue;
+
             setCurrentStep(step.id as InvestigationStep);
-            await new Promise(resolve => setTimeout(resolve, step.duration));
+            // Short fake delay for visual pacing
+            await new Promise(resolve => setTimeout(resolve, 800));
             setCompletedSteps(prev => [...prev, step.id]);
         }
 
+        // --- 3. "The Wait" (Deep Investigation) ---
+        // This is where the backend spends most time (Scraping + Stance Detection)
+        // We park the UI here and let NeuralStream show dynamic thoughts
+
+        // Transition to Searching Web
+        setCurrentStep('searching_web');
+        // Wait at least 2 seconds so it doesn't flash if cached
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // Check if API is done? No, we just move to next heavy step to keep it interesting
+        if (!verifiedClaims.length) { // Weak check, mostly just to proceed visually
+            setCompletedSteps(prev => [...prev, 'searching_web']);
+            setCurrentStep('analyzing_stance');
+        }
+
         try {
+            // Await the actual result
+            // The UI will stay on 'analyzing_stance' (with dynamic Cycle thoughts) until this returns
             const response = await apiPromise;
+
+            setCompletedSteps(prev => [...prev, 'analyzing_stance']);
+
+            // --- 4. Final Synthesis (Fast) ---
+            setCurrentStep('synthesizing');
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Brief "Synthesizing" pause
+            setCompletedSteps(prev => [...prev, 'synthesizing']);
 
             // Prioritize checkable claims if multiple found
             const claims = response.verified_claims || [];
@@ -706,60 +815,85 @@ export function InvestigationPage() {
             });
 
             setVerifiedClaims(claims);
-
-            // DEBUG: Log claims to check strategy_stats
-            console.log("[DEBUG] Verified Claims:", claims);
-            claims.forEach(c => console.log(`[DEBUG] Claim: ${c.claim_type}, Stats:`, c.strategy_stats));
-
             setActiveClaimIndex(0);
             setCurrentStep('complete');
+
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Investigation failed');
             setCurrentStep('error');
         }
-    }, [inputText, isUrl]);
+    }, [inputText, isUrl, selectedImage]);
 
     const handleReset = () => {
         setInputText('');
+        setSelectedImage(null);
+        if (fileInputRef.current) fileInputRef.current.value = '';
         setCurrentStep('idle');
         setCompletedSteps([]);
         setVerifiedClaims([]);
         setError(null);
     };
 
-    const isInvestigating = currentStep !== 'idle' && currentStep !== 'complete' && currentStep !== 'error';
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onloadend = () => {
+            const base64String = reader.result as string;
+            setSelectedImage(base64String);
+            setInputText(`[Image Selected: ${file.name}]`);
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const clearImage = (e?: React.MouseEvent) => {
+        e?.stopPropagation();
+        setSelectedImage(null);
+        setInputText('');
+        if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
     const primaryClaim = verifiedClaims[activeClaimIndex];
 
     return (
         <div
-            className="min-h-screen pt-28 pb-24 px-6 font-sans text-foreground transition-colors duration-300"
+            className={`min-h-screen font-sans text-foreground transition-all duration-500 ${isInvestigating
+                ? 'pt-4 pb-0 px-0 flex flex-col justify-center overflow-hidden h-screen' // Investigation Mode: Tight, Full Screen
+                : 'pt-28 pb-24 px-6' // Idle Mode: Spacious
+                }`}
         >
 
             <div className="relative z-10 max-w-7xl mx-auto">
 
                 {/* Hero Header */}
-                <motion.div
-                    initial={{ opacity: 0, y: -30 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    className="text-center mb-16"
-                >
-                    <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
-                        <span className="relative flex h-2 w-2">
-                            <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isArchived ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
-                            <span className={`relative inline-flex rounded-full h-2 w-2 ${isArchived ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
-                        </span>
-                        <span className="text-xs font-semibold text-foreground/80 uppercase tracking-widest">
-                            {isArchived ? 'Archived Analysis' : 'TruthLens V3 Active'}
-                        </span>
-                    </div>
+                <AnimatePresence>
+                    {currentStep === 'idle' && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -30 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, height: 0, overflow: 'hidden' }}
+                            className="text-center mb-16"
+                        >
+                            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/5 border border-white/10 mb-6 backdrop-blur-md">
+                                <span className="relative flex h-2 w-2">
+                                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${isArchived ? 'bg-amber-400' : 'bg-emerald-400'}`}></span>
+                                    <span className={`relative inline-flex rounded-full h-2 w-2 ${isArchived ? 'bg-amber-500' : 'bg-emerald-500'}`}></span>
+                                </span>
+                                <span className="text-xs font-semibold text-foreground/80 uppercase tracking-widest">
+                                    {isArchived ? 'Archived Analysis' : 'TruthLens V3 Active'}
+                                </span>
+                            </div>
 
-                    <h1 className="text-6xl md:text-7xl font-bold mb-6 tracking-tight">
-                        <GradientText>TruthLens Investigation</GradientText>
-                    </h1>
-                    <p className="text-xl md:text-2xl font-light text-muted-foreground max-w-2xl mx-auto">
-                        Advanced claim verification and real-time evidence synthesis
-                    </p>
-                </motion.div>
+                            <h1 className="text-6xl md:text-7xl font-bold mb-6 tracking-tight">
+                                <GradientText>TruthLens Investigation</GradientText>
+                            </h1>
+                            <p className="text-xl md:text-2xl font-light text-muted-foreground max-w-2xl mx-auto">
+                                Advanced claim verification and real-time evidence synthesis
+                            </p>
+                        </motion.div>
+                    )}
+                </AnimatePresence>
 
                 {/* Input Section */}
                 <AnimatePresence mode="wait">
@@ -781,13 +915,34 @@ export function InvestigationPage() {
                                             <label className="text-sm font-semibold text-muted-foreground uppercase tracking-widest">
                                                 Investigation Target
                                             </label>
-                                            {isUrl && (
-                                                <div className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold flex items-center gap-2 border border-blue-500/20">
-                                                    <LinkIcon className="w-3 h-3" />
-                                                    ARTICLE DETECTED
-                                                </div>
-                                            )}
+                                            <div className="flex items-center gap-3">
+                                                {!selectedImage && (
+                                                    <button
+                                                        onClick={() => fileInputRef.current?.click()}
+                                                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-xs font-bold text-cyan-400 transition-all hover:scale-105 active:scale-95"
+                                                        title="Upload image containing text/claims"
+                                                    >
+                                                        <Camera className="w-3.5 h-3.5" />
+                                                        SCAN IMAGE
+                                                    </button>
+                                                )}
+                                                {isUrl && (
+                                                    <div className="px-3 py-1 rounded-full bg-blue-500/10 text-blue-400 text-xs font-bold flex items-center gap-2 border border-blue-500/20">
+                                                        <LinkIcon className="w-3 h-3" />
+                                                        ARTICLE DETECTED
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
+
+                                        {/* Hidden File Input */}
+                                        <input
+                                            type="file"
+                                            ref={fileInputRef}
+                                            onChange={handleImageUpload}
+                                            accept="image/*"
+                                            className="hidden"
+                                        />
 
                                         <textarea
                                             value={inputText}
@@ -796,6 +951,29 @@ export function InvestigationPage() {
                                             className="w-full h-40 bg-transparent text-3xl md:text-4xl font-light text-foreground placeholder-muted-foreground/60 focus:outline-none resize-none"
                                             spellCheck={false}
                                         />
+
+                                        {/* Image Preview Overlay */}
+                                        {selectedImage && (
+                                            <div className="absolute inset-0 bg-background/90 backdrop-blur-md rounded-[1.8rem] z-10 flex flex-col items-center justify-center p-6 border border-primary/20">
+                                                <div className="relative group/preview">
+                                                    <img
+                                                        src={selectedImage}
+                                                        alt="Selected for analysis"
+                                                        className="h-48 rounded-xl object-contain shadow-2xl border border-white/10"
+                                                    />
+                                                    <button
+                                                        onClick={clearImage}
+                                                        className="absolute -top-3 -right-3 p-2 bg-red-500 hover:bg-red-600 text-white rounded-full shadow-lg transition-transform hover:scale-110"
+                                                    >
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                                <p className="mt-4 text-primary font-medium flex items-center gap-2">
+                                                    <ImageIcon className="w-4 h-4" />
+                                                    Ready to analyze image text
+                                                </p>
+                                            </div>
+                                        )}
 
                                         <div className="flex justify-between items-end mt-6">
                                             <div className="text-xs text-muted-foreground/60">
@@ -972,6 +1150,26 @@ export function InvestigationPage() {
                     )}
                 </AnimatePresence>
             </div>
+
+            {/* TRIVIA 2.0 FULL-SCREEN LAYER */}
+            <AnimatePresence mode="wait">
+                {fact && (
+                    <motion.div
+                        key={fact}
+                        initial={{ opacity: 0, scale: 0.9, y: 10, filter: "blur(10px)" }}
+                        animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                        exit={{ opacity: 0, scale: 1.1, y: -10, filter: "blur(10px)" }}
+                        transition={{ duration: 1.5, ease: "easeInOut" }}
+                        className={`pointer-events-none max-w-[22vw] min-w-[260px] flex flex-col ${factAlign === 'left' ? 'items-start text-left' : 'items-end text-right'}`}
+                        style={factStyle}
+                    >
+                        <Sparkles className="w-5 h-5 text-yellow-500/50 opacity-50 mb-3" />
+                        <p className="text-xl md:text-2xl font-serif italic font-light text-foreground/40 dark:text-white/40 leading-tight">
+                            "{fact}"
+                        </p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }

@@ -25,15 +25,20 @@ class ExplanationService:
         self.client = None
         
         # 1. Try Gemini
+        # 1. Try Gemini
         gemini_key = settings.gemini_api_key
+        print(f"DEBUG: Gemini Key from Settings: '{gemini_key}'")
+        
         if gemini_key and "placeholder" not in gemini_key.lower() and not gemini_key.startswith("your_"):
             try:
                 genai.configure(api_key=gemini_key)
-                self.client = genai.GenerativeModel('gemini-pro')
+                self.client = genai.GenerativeModel('gemini-1.5-flash')
                 self.provider = "gemini"
                 print("✅ Explanation Service: Connected to Gemini Pro")
             except Exception as e:
                 print(f"⚠️ Gemini Init Failed: {e}")
+        else:
+             print("DEBUG: Gemini Key validation failed (is None, placeholder, or default).")
 
         # 2. Try Groq (if Gemini failed/missing/invalid)
         if not self.client and settings.groq_api_key and "placeholder" not in settings.groq_api_key.lower() and not settings.groq_api_key.startswith("your_"):

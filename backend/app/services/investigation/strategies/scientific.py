@@ -56,8 +56,8 @@ class ScientificStrategy(InvestigationStrategy):
             # Check for retraction
             is_retracted = "retracted" in result.title.lower() or "retracted" in result.snippet.lower()
             
-            # Detect Stance
-            stance_result = self.stance_detector.detect(ctx.claim.text, result.snippet)
+            # Detect Stance (Async)
+            stance_result = await self.stance_detector.detect_async(ctx.claim.text, result.snippet)
             label = stance_result["label"]
             confidence = stance_result["score"]
             
