@@ -41,7 +41,7 @@ class AnalyzeRequestV3(BaseModel):
     content: str = Field(
         ...,
         min_length=1,
-        max_length=50000,
+        max_length=10000000,
         description="The content to analyze"
     )
     options: Optional[dict] = Field(
@@ -218,7 +218,7 @@ class InvestigateRequestV3(BaseModel):
     content: str = Field(
         ...,
         min_length=1,
-        max_length=50000,
+        max_length=10000000,
         description="The content to analyze and investigate"
     )
     

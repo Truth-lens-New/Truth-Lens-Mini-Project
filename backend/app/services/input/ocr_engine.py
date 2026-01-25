@@ -62,12 +62,16 @@ class OCREngine:
             temp_path = f.name
         
         try:
-            # Run OCR
-            results = self.reader.readtext(temp_path)
+            # Run OCR with paragraph grouping
+            # paragraph=True combines text that belongs together, improving coherence
+            results = self.reader.readtext(temp_path, paragraph=True)
             
-            # Extract text from results (format: [(bbox, text, confidence), ...])
+            # Extract text from results (format with paragraph=True is [[bbox, text], ...])
+            # We skip bbox and just take the text
             texts = [result[1] for result in results]
             combined_text = ' '.join(texts)
+            
+            print(f"OCR Extracted: {combined_text}") # Debug log
             
             if not combined_text.strip():
                 raise ValueError("No text found in image")

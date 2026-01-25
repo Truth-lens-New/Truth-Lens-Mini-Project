@@ -691,13 +691,8 @@ export function InvestigationPage() {
         }
     }, [currentStep]);
 
-    // Clear selected image when user types
-    useEffect(() => {
-        if (inputText) {
-            setSelectedImage(null);
-            if (fileInputRef.current) fileInputRef.current.value = '';
-        }
-    }, [inputText]);
+    // Clear selected image when user types (MOVED to textarea onChange)
+    // useEffect(() => { ... }, [inputText]); - REMOVED to fix race condition
 
     // Auto-detect URL
     const isUrl = useMemo(() => {
@@ -946,7 +941,15 @@ export function InvestigationPage() {
 
                                         <textarea
                                             value={inputText}
-                                            onChange={(e) => setInputText(e.target.value)}
+                                            onChange={(e) => {
+                                                setInputText(e.target.value);
+                                                // Clear image if user types manually (and it's not the auto-set image text)
+                                                // We can simply clear if selectedImage is true, assuming typing means overriding
+                                                if (selectedImage) {
+                                                    setSelectedImage(null);
+                                                    if (fileInputRef.current) fileInputRef.current.value = '';
+                                                }
+                                            }}
                                             placeholder="Paste a claim, sentence, or article URL..."
                                             className="w-full h-40 bg-transparent text-3xl md:text-4xl font-light text-foreground placeholder-muted-foreground/60 focus:outline-none resize-none"
                                             spellCheck={false}
@@ -968,10 +971,23 @@ export function InvestigationPage() {
                                                         <X className="w-4 h-4" />
                                                     </button>
                                                 </div>
-                                                <p className="mt-4 text-primary font-medium flex items-center gap-2">
+                                                <p className="mt-4 text-primary font-medium flex items-center gap-2 mb-6">
                                                     <ImageIcon className="w-4 h-4" />
                                                     Ready to analyze image text
                                                 </p>
+
+                                                <button
+                                                    onClick={() => runInvestigation()}
+                                                    className="group/btn relative px-8 py-3 rounded-xl font-bold text-lg flex items-center gap-3 transition-all overflow-hidden text-white shadow-xl hover:shadow-2xl hover:scale-105 active:scale-95"
+                                                    style={{ background: 'var(--gradient-primary)' }}
+                                                >
+                                                    {/* Shimmer effect */}
+                                                    <div className="absolute inset-0 -translate-x-full group-hover/btn:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+
+                                                    <Zap className="w-5 h-5 fill-current" />
+                                                    <span>Analyze Image</span>
+                                                    <ChevronRight className="w-5 h-5 group-hover/btn:translate-x-1 transition-transform" />
+                                                </button>
                                             </div>
                                         )}
 
@@ -1103,7 +1119,7 @@ export function InvestigationPage() {
                                 </div>
                                 <button
                                     onClick={handleReset}
-                                    className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:bg-white/10 text-white/60 hover:text-white border border-transparent hover:border-white/10"
+                                    className="flex items-center gap-2 px-6 py-2.5 rounded-full text-sm font-semibold transition-all hover:bg-muted text-muted-foreground hover:text-foreground border border-transparent hover:border-border/50"
                                 >
                                     <RotateCcw className="w-4 h-4" />
                                     New Search

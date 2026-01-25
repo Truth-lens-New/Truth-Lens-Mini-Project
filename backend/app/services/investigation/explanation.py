@@ -130,10 +130,11 @@ class ExplanationService:
             {base_evidence}
             
             Directives:
-            - Prioritize official records (.gov, legislation) over news reports.
-            - If sources are split (Left vs Right), explicitly state that it is a disputed topic.
-            - Remain absolutely neutral.
-            - Keep it under 80 words.
+            - If verdict is FALSE, specifically state the TRUTH found in the evidence (e.g., "Actually, X is Y").
+            - Explain *why* the claim is false using the evidence (e.g. " Official records from [Source] confirm that...").
+            - Use natural, easy-to-understand language. Avoid robotic phrasing like "Evidence indicates".
+            - If sources are split, explain the disagreement simply.
+            - Keep it to the point and conversational. Under 100 words.
             """
 
         # === 3. Breaking News Strategy ===
@@ -171,9 +172,11 @@ class ExplanationService:
             {base_evidence}
             
             Directives:
-            - Synthesize the evidence into a clear conclusion.
+            - Synthesize the evidence into a clear, natural conclusion.
+            - If FALSE, state what the actual fact is based on evidence.
             - Mention the most reliable source found.
-            - Keep it under 80 words.
+            - Use accessible language.
+            - Keep it under 100 words.
             """
 
     async def explain_media(self, image_bytes: bytes, verdict: str, confidence: float) -> str:
