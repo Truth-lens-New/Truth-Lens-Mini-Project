@@ -3,6 +3,7 @@
 @layer base {
   :root {
     /* "Antigravity" Light Theme - Main defaults */
+    --font-display: "Space Grotesk", "Inter", system-ui, sans-serif;
     --background: 0.99 0 0;
     /* Brighter white */
     /* #fbfbfb - Clean Off-white */

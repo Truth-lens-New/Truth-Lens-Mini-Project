@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Download, Eye, EyeOff, ZoomIn, FileText, FolderPlus, Layers, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Download, ZoomIn, FolderPlus, Layers } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell } from 'recharts';
 import type { MediaAnalysisResponse } from '../lib/api';
 
@@ -7,9 +7,10 @@ interface ResultsCreatorProps {
   preview: string | null;
   onBack: () => void;
   analysisResult: MediaAnalysisResponse;
+  file: File;
 }
 
-export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreatorProps) {
+export function ResultsCreator({ preview, onBack, analysisResult, file }: ResultsCreatorProps) {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showELA, setShowELA] = useState(false);
 
@@ -66,8 +67,8 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
                   <button
                     onClick={() => setShowHeatmap(!showHeatmap)}
                     className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showHeatmap
-                        ? 'bg-primary/20 border border-primary/50 text-primary'
-                        : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
+                      ? 'bg-primary/20 border border-primary/50 text-primary'
+                      : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
                       }`}
                   >
                     Heatmap
@@ -75,8 +76,8 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
                   <button
                     onClick={() => setShowELA(!showELA)}
                     className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showELA
-                        ? 'bg-secondary/20 border border-secondary/50 text-secondary'
-                        : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
+                      ? 'bg-secondary/20 border border-secondary/50 text-secondary'
+                      : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
                       }`}
                   >
                     ELA
@@ -87,18 +88,32 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
                 </div>
               </div>
 
-              <div className="relative rounded-xl overflow-hidden">
-                <img src={preview || ''} alt="Analysis" className="w-full h-[600px] object-cover" />
-                {showHeatmap && (
-                  <div className={`absolute inset-0 ${isReal ? 'bg-gradient-to-br from-green-500/30 via-green-400/20 to-green-500/30' : 'bg-gradient-to-br from-red-500/30 via-yellow-500/20 to-red-500/30'} backdrop-blur-sm`}>
-                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs">
+              <div className="relative rounded-xl overflow-hidden flex justify-center bg-black/20">
+                {file.type.startsWith('video/') ? (
+                  <video
+                    src={preview || ''}
+                    controls
+                    className="w-auto h-auto max-h-[70vh] max-w-full object-contain"
+                  />
+                ) : (
+                  <img
+                    src={preview || ''}
+                    alt="Analysis"
+                    className="w-auto h-auto max-h-[70vh] max-w-full object-contain"
+                  />
+                )}
+
+                {/* Overlays for Images Only (or video if supported later) */}
+                {!file.type.startsWith('video/') && showHeatmap && (
+                  <div className={`absolute inset-0 ${isReal ? 'bg-gradient-to-br from-green-500/30 via-green-400/20 to-green-500/30' : 'bg-gradient-to-br from-red-500/30 via-yellow-500/20 to-red-500/30'} backdrop-blur-sm pointer-events-none`}>
+                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white">
                       Manipulation Heatmap
                     </div>
                   </div>
                 )}
-                {showELA && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/40 to-blue-500/40 backdrop-blur-sm mix-blend-screen">
-                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs">
+                {!file.type.startsWith('video/') && showELA && (
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/40 to-blue-500/40 backdrop-blur-sm mix-blend-screen pointer-events-none">
+                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white">
                       Error Level Analysis
                     </div>
                   </div>
@@ -147,16 +162,24 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
               <h3 className="text-xl mb-4 text-foreground">Metadata Information</h3>
               <div className="space-y-3">
                 {[
-                  { label: 'Camera Model', value: 'Canon EOS R5' },
-                  { label: 'Date Taken', value: '2024-12-08 14:32:15' },
-                  { label: 'GPS Location', value: '37.7749° N, 122.4194° W' },
-                  { label: 'ISO', value: '400' },
-                  { label: 'Exposure', value: '1/250s' },
-                  { label: 'Focal Length', value: '50mm' },
+                  { label: 'File Name', value: file.name },
+                  { label: 'File Type', value: file.type || 'Unknown' },
+                  { label: 'File Size', value: `${(file.size / 1024 / 1024).toFixed(2)} MB` },
+                  { label: 'Last Modified', value: new Date(file.lastModified).toLocaleDateString() },
+                  // Add optional fake metadata if needed or keep it real
+                  ...(analysisResult.metadata ? Object.entries(analysisResult.metadata)
+                    .filter(([k, v]) => {
+                      if (file.type.startsWith('video/')) {
+                        if (k.toLowerCase() === 'format' && ['jpeg', 'png', 'jpg'].includes(String(v).toLowerCase())) return false;
+                        if (k.toLowerCase() === 'size') return false;
+                      }
+                      return true;
+                    })
+                    .map(([k, v]) => ({ label: k, value: String(v) })) : [])
                 ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between py-2 border-b border-border/10">
                     <span className="text-sm text-muted-foreground">{item.label}</span>
-                    <span className="text-sm text-foreground">{item.value}</span>
+                    <span className="text-sm text-foreground truncate max-w-[200px]" title={item.value}>{item.value}</span>
                   </div>
                 ))}
               </div>

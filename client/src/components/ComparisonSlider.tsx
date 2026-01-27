@@ -6,13 +6,15 @@ interface ComparisonSliderProps {
     overlay: string; // The heatmap or modified image
     labelOriginal?: string;
     labelOverlay?: string;
+    isVideo?: boolean;
 }
 
 export function ComparisonSlider({
     original,
     overlay,
     labelOriginal = "Original",
-    labelOverlay = "Analysis Heatmap"
+    labelOverlay = "Analysis Heatmap",
+    isVideo = false
 }: ComparisonSliderProps) {
     const [position, setPosition] = useState(50);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -30,10 +32,6 @@ export function ComparisonSlider({
     }, []);
 
     const handleMouseDown = () => { isDragging.current = true; };
-    const handleMouseUp = () => { isDragging.current = false; };
-    const handleMouseMove = (e: React.MouseEvent) => {
-        if (isDragging.current) handleMove(e.clientX);
-    };
 
     const handleTouchMove = (e: React.TouchEvent) => {
         handleMove(e.touches[0].clientX);
@@ -57,36 +55,59 @@ export function ComparisonSlider({
     return (
         <div
             ref={containerRef}
-            className="relative w-full h-[500px] rounded-xl overflow-hidden select-none cursor-col-resize group"
+            className="relative w-fit mx-auto rounded-xl overflow-hidden select-none cursor-col-resize group"
             onMouseDown={handleMouseDown}
             onTouchMove={handleTouchMove}
         >
-            {/* Background: Original Image */}
-            <img
-                src={original}
-                alt="Original"
-                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-            />
+            {/* Background: Original Media (Relative - Defines Size) */}
+            {isVideo ? (
+                <video
+                    src={original}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="block max-h-[70vh] max-w-full w-auto h-auto object-contain pointer-events-none"
+                />
+            ) : (
+                <img
+                    src={original}
+                    alt="Original"
+                    className="block max-h-[70vh] max-w-full w-auto h-auto object-contain pointer-events-none"
+                />
+            )}
 
-            {/* Foreground: Overlay (Heatmap) - Clipped */}
+            {/* Foreground: Overlay (Heatmap) - Absolute on top */}
             <div
                 className="absolute inset-0 w-full h-full overflow-hidden pointer-events-none"
                 style={{ clipPath: `polygon(0 0, ${position}% 0, ${position}% 100%, 0 100%)` }}
             >
-                <img
-                    src={overlay}
-                    alt="Overlay"
-                    className="absolute inset-0 w-full h-full object-cover"
-                />
+                {isVideo ? (
+                    <video
+                        src={overlay}
+                        autoPlay
+                        muted
+                        loop
+                        playsInline
+                        className="absolute inset-0 w-full h-full object-contain"
+                    />
+                ) : (
+                    <img
+                        src={overlay}
+                        alt="Overlay"
+                        className="absolute inset-0 w-full h-full object-contain"
+                    />
+                )}
+
                 {/* Helper Badge for Overlay */}
-                <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white border border-white/10">
+                <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white border border-white/10 z-10 shadow-sm">
                     {labelOverlay}
                 </div>
             </div>
 
             {/* Helper Badge for Original (Visible on right side) */}
             <div
-                className="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white border border-white/10 pointer-events-none transition-opacity duration-300"
+                className="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white border border-white/10 pointer-events-none transition-opacity duration-300 z-10 shadow-sm"
                 style={{ opacity: position > 90 ? 0 : 1 }}
             >
                 {labelOriginal}
@@ -103,7 +124,7 @@ export function ComparisonSlider({
             </div>
 
             {/* Instructions Overlay (Fades out) */}
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/50 backdrop-blur-md text-xs text-white/80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full bg-black/50 backdrop-blur-md text-xs text-white/80 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity z-20">
                 Drag to compare
             </div>
         </div>

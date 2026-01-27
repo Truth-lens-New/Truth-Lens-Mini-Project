@@ -86,8 +86,11 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
     });
   };
 
-  // Special handling for Landing/Auth pages to match their dark aesthetic and prevent clutter
+  // Special handling for Landing/Auth pages:
+  // In Dark Mode: standardized dark glass.
+  // In Light Mode: "Antigravity" clean glass (dark text).
   const isTransparentPage = ['landing', 'login', 'register'].includes(currentPage);
+  const isDark = theme === 'dark';
 
   // Track scroll for dynamic navbar transparency
   const [isScrolled, setIsScrolled] = useState(false);
@@ -97,18 +100,21 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // If on landing page, we force "dark" style appearance (transparent glass) regardless of system theme
-  // Dynamic behavior: Transparent at top, Dark Glass when scrolled
-  const navContainerClass = isTransparentPage
-    ? `mx-auto rounded-full transition-all duration-300 ${isScrolled
-      ? 'backdrop-blur-md bg-black/40 border border-white/10 shadow-lg shadow-black/20 hover:bg-black/60 hover:border-white/20'
-      : 'bg-transparent border-transparent shadow-none'}`
-    : `mx-auto rounded-full backdrop-blur-2xl transition-all duration-300
-      bg-background/80 border border-border/50 shadow-lg shadow-black/5
-      hover:shadow-xl hover:border-border/80 hover:bg-background/90
-      dark:bg-card/60 dark:border-white/10 dark:shadow-[0_0_30px_-10px] dark:shadow-primary/20
-      dark:hover:border-primary/30 dark:hover:shadow-[0_0_40px_-10px] dark:hover:shadow-primary/30
-      dark:ring-1 dark:ring-white/5`;
+  const navContainerClass = `mx-auto rounded-full backdrop-blur-2xl transition-all duration-300
+    ${isTransparentPage && !isScrolled ? 'bg-transparent border-transparent shadow-none' : ''}
+    ${isTransparentPage && isScrolled && isDark ? 'bg-black/40 border-white/10' : ''}
+    ${isTransparentPage && isScrolled && !isDark ? 'bg-white/60 border-black/5 shadow-sm' : ''}
+    ${!isTransparentPage ? 'bg-background/80 border-border/50 shadow-lg' : ''}
+  `;
+
+  // Text colors based on background
+  const logoGradient = isTransparentPage && isDark
+    ? 'bg-gradient-to-r from-[#00FFC3] to-[#99F8FF]'
+    : 'bg-gradient-to-r from-primary to-secondary'; // Dark text for Light mode landing
+
+  const textColor = isTransparentPage && isDark && !isScrolled
+    ? 'text-white/80 hover:text-white'
+    : 'text-muted-foreground hover:text-foreground';
 
   return (
     <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
@@ -117,7 +123,7 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
           <div className="flex items-center gap-6">
             <div
               onClick={() => onNavigate('landing')}
-              className={`text-lg font-bold bg-clip-text text-transparent cursor-pointer ${isTransparentPage ? 'bg-gradient-to-r from-[#00FFC3] to-[#99F8FF]' : 'bg-gradient-to-r from-primary to-secondary'}`}
+              className={`text-lg font-bold bg-clip-text text-transparent cursor-pointer ${logoGradient}`}
             >
               TruthLens
             </div>
@@ -155,29 +161,27 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
           <div className="flex items-center gap-2">
             {!isTransparentPage && <div className="h-4 w-px bg-border/50 mx-1 hidden sm:block" />}
 
-            {/* Theme Toggle (Hidden on Landing/Auth pages as they are forced dark) */}
-            {!isTransparentPage && (
-              <button
-                onClick={toggleTheme}
-                className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-foreground/5 transition-colors"
-                title="Toggle Theme"
-              >
-                {mounted && theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-              </button>
-            )}
+            {/* Theme Toggle (Always visible now) */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 text-muted-foreground hover:text-foreground rounded-full hover:bg-foreground/5 transition-colors"
+              title="Toggle Theme"
+            >
+              {mounted && theme === 'dark' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+            </button>
 
             {!isAuthenticated ? (
               <div className="flex items-center gap-2 ml-1">
                 <button
                   onClick={() => onNavigate('login')}
-                  className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1.5 ${currentPage === 'login' ? 'hidden' : ''} ${isTransparentPage ? 'text-white/80 hover:text-white hover:bg-white/10' : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5'}`}
+                  className={`px-4 py-1.5 text-xs font-medium rounded-full transition-all flex items-center gap-1.5 ${currentPage === 'login' ? 'hidden' : ''} ${textColor}`}
                 >
                   <LogIn className="w-3.5 h-3.5" />
                   Sign In
                 </button>
                 <button
                   onClick={() => onNavigate('register')}
-                  className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all shadow-sm flex items-center gap-1.5 ${currentPage === 'register' ? 'hidden' : ''} ${isTransparentPage ? 'bg-gradient-to-r from-[#00FFC3] to-[#99F8FF] text-black hover:shadow-[0_0_15px_rgba(0,255,195,0.3)]' : 'text-primary-foreground bg-primary hover:bg-primary/90 shadow-primary/20'}`}
+                  className={`px-4 py-1.5 text-xs font-bold rounded-full transition-all shadow-sm flex items-center gap-1.5 ${currentPage === 'register' ? 'hidden' : ''} ${isTransparentPage && isDark ? 'bg-gradient-to-r from-[#00FFC3] to-[#99F8FF] text-black hover:shadow-[0_0_15px_rgba(0,255,195,0.3)]' : 'text-primary-foreground bg-primary hover:bg-primary/90 shadow-primary/20'}`}
                 >
                   <UserPlus className="w-3.5 h-3.5" />
                   Sign Up
@@ -189,7 +193,7 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                 {isTransparentPage && (
                   <button
                     onClick={() => onNavigate('dashboard')}
-                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-white/90 hover:text-white bg-white/10 hover:bg-white/20 rounded-full border border-white/10 transition-all"
+                    className="flex items-center gap-1.5 px-4 py-1.5 text-xs font-medium text-foreground/80 hover:text-foreground bg-foreground/5 hover:bg-foreground/10 rounded-full border border-foreground/5 transition-all"
                   >
                     <LayoutDashboard className="w-3.5 h-3.5" />
                     Dashboard
@@ -199,20 +203,20 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                 <div className="relative ml-1">
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
-                    className={`flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-all ${isTransparentPage ? 'hover:bg-white/10 border-transparent hover:border-white/20' : 'hover:bg-foreground/5 border-transparent hover:border-border/20'}`}
+                    className={`flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-all ${isTransparentPage && isDark ? 'hover:bg-white/10 border-transparent hover:border-white/20' : 'hover:bg-foreground/5 border-transparent hover:border-border/20'}`}
                   >
-                    <div className={`w-7 h-7 rounded-full flex items-center justify-center border ring-1 ring-offset-0 ${isTransparentPage ? 'bg-gradient-to-tr from-[#00FFC3]/20 via-[#00FFC3]/10 to-[#99F8FF]/20 border-[#00FFC3]/20 ring-black' : 'bg-gradient-to-tr from-primary/20 via-primary/10 to-secondary/20 border-primary/20 ring-background'}`}>
-                      <User className={`w-3.5 h-3.5 ${isTransparentPage ? 'text-[#00FFC3]' : 'text-foreground'}`} />
+                    <div className={`w-7 h-7 rounded-full flex items-center justify-center border ring-1 ring-offset-0 ${isTransparentPage && isDark ? 'bg-gradient-to-tr from-[#00FFC3]/20 via-[#00FFC3]/10 to-[#99F8FF]/20 border-[#00FFC3]/20 ring-black' : 'bg-gradient-to-tr from-primary/20 via-primary/10 to-secondary/20 border-primary/20 ring-background'}`}>
+                      <User className={`w-3.5 h-3.5 ${isTransparentPage && isDark ? 'text-[#00FFC3]' : 'text-foreground'}`} />
                     </div>
-                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''} ${isTransparentPage ? 'text-white/60' : 'text-muted-foreground'}`} />
+                    <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${showUserMenu ? 'rotate-180' : ''} ${isTransparentPage && isDark ? 'text-white/60' : 'text-muted-foreground'}`} />
                   </button>
 
                   {showUserMenu && (
-                    <div className={`absolute right-0 mt-3 w-64 rounded-2xl backdrop-blur-xl border shadow-xl overflow-hidden z-50 transform origin-top-right animate-in fade-in zoom-in-95 duration-200 ${isTransparentPage ? 'bg-black/90 border-white/10 shadow-black/40' : 'bg-card/95 border-border/50 shadow-black/10'}`}>
+                    <div className={`absolute right-0 mt-3 w-64 rounded-2xl backdrop-blur-xl border shadow-xl overflow-hidden z-50 transform origin-top-right animate-in fade-in zoom-in-95 duration-200 ${isTransparentPage && isDark ? 'bg-black/90 border-white/10 shadow-black/40' : 'bg-card/95 border-border/50 shadow-black/10'}`}>
                       {userEmail && (
-                        <div className={`px-5 py-4 border-b ${isTransparentPage ? 'border-white/10 bg-white/5' : 'border-border/40 bg-muted/30'}`}>
-                          <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${isTransparentPage ? 'text-white/40' : 'text-muted-foreground'}`}>Signed in as</div>
-                          <div className={`text-sm truncate font-medium ${isTransparentPage ? 'text-white' : 'text-foreground'}`}>{userEmail}</div>
+                        <div className={`px-5 py-4 border-b ${isTransparentPage && isDark ? 'border-white/10 bg-white/5' : 'border-border/40 bg-muted/30'}`}>
+                          <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${isTransparentPage && isDark ? 'text-white/40' : 'text-muted-foreground'}`}>Signed in as</div>
+                          <div className={`text-sm truncate font-medium ${isTransparentPage && isDark ? 'text-white' : 'text-foreground'}`}>{userEmail}</div>
                         </div>
                       )}
 

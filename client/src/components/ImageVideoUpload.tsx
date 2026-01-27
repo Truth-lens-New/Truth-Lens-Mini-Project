@@ -101,11 +101,11 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
 
   if (showResults && file && analysisResult) {
     if (userMode === 'Basic') {
-      return <ResultsBasic preview={preview} onBack={handleBack} analysisResult={analysisResult} />;
+      return <ResultsBasic preview={preview} onBack={handleBack} analysisResult={analysisResult} file={file} />;
     } else if (userMode === 'Creator') {
-      return <ResultsCreator preview={preview} onBack={handleBack} analysisResult={analysisResult} />;
+      return <ResultsCreator preview={preview} onBack={handleBack} analysisResult={analysisResult} file={file} />;
     } else {
-      return <ResultsProfessional preview={preview} onBack={handleBack} analysisResult={analysisResult} />;
+      return <ResultsProfessional preview={preview} onBack={handleBack} analysisResult={analysisResult} file={file} />;
     }
   }
 
@@ -204,19 +204,19 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
             <div className="p-8 rounded-3xl backdrop-blur-md bg-gradient-to-br from-white/10 to-white/5 border border-white/10 relative overflow-hidden">
               <div className="absolute inset-0 bg-gradient-to-br from-[#00FFC3]/5 to-transparent" />
 
-              <div className="relative flex items-start gap-6">
-                <div className="flex-1">
+              <div className="relative flex flex-col md:flex-row items-center gap-6">
+                <div className="w-full md:w-1/2 flex justify-center bg-black/20 rounded-xl p-2">
                   {file.type.startsWith('video/') ? (
                     <video
                       src={preview}
                       controls
-                      className="w-full h-80 object-cover rounded-xl"
+                      className="w-full h-auto max-h-[400px] object-contain rounded-lg"
                     />
                   ) : (
                     <img
                       src={preview}
                       alt="Preview"
-                      className="w-full h-80 object-cover rounded-xl"
+                      className="w-full h-auto max-h-[400px] object-contain rounded-lg"
                     />
                   )}
                 </div>

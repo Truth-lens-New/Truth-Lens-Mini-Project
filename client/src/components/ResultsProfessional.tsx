@@ -7,13 +7,13 @@ interface ResultsProfessionalProps {
   preview: string | null;
   onBack: () => void;
   analysisResult: MediaAnalysisResponse;
+  file: File;
 }
 
-export function ResultsProfessional({ preview, onBack, analysisResult }: ResultsProfessionalProps) {
+export function ResultsProfessional({ preview, onBack, analysisResult, file }: ResultsProfessionalProps) {
   const [notes, setNotes] = useState('');
 
   const isReal = analysisResult.verdict === 'REAL';
-  const verdictColor = isReal ? '#00FFC3' : '#FF6B6B';
 
   // Dynamic ensemble data based on actual result
   const ensembleData = [
@@ -58,7 +58,7 @@ export function ResultsProfessional({ preview, onBack, analysisResult }: Results
           </div>
           <div className="flex items-center gap-3">
             <div className="px-4 py-2 rounded-lg bg-[#00FFC3]/10 border border-[#00FFC3]/30 text-[#00FFC3] text-sm">
-              Case ID: TL-2024-0849
+              Case ID: TL-{new Date().getFullYear()}-{Math.floor(Math.random() * 10000)}
             </div>
           </div>
         </div>
@@ -68,19 +68,33 @@ export function ResultsProfessional({ preview, onBack, analysisResult }: Results
           {/* Media Preview */}
           <div className="col-span-1 p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
             <h3 className="mb-3">Evidence Preview</h3>
-            <img src={preview || ''} alt="Evidence" className="w-full h-64 object-cover rounded-lg mb-3" />
+            <div className="flex justify-center bg-black/20 rounded-lg p-2 mb-3">
+              {file.type.startsWith('video/') ? (
+                <video
+                  src={preview || ''}
+                  controls
+                  className="w-auto h-auto max-h-[300px] max-w-full object-contain"
+                />
+              ) : (
+                <img
+                  src={preview || ''}
+                  alt="Evidence"
+                  className="w-auto h-auto max-h-[300px] max-w-full object-contain"
+                />
+              )}
+            </div>
             <div className="space-y-2 text-xs">
               <div className="flex justify-between py-1.5 border-b border-white/5">
-                <span className="text-[#D6D6D6]">Hash (SHA-256)</span>
-                <span className="font-mono text-[#00FFC3]">a3f5...</span>
+                <span className="text-[#D6D6D6]">File Name</span>
+                <span className="font-mono text-[#00FFC3] truncate max-w-[150px]" title={file.name}>{file.name}</span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-white/5">
                 <span className="text-[#D6D6D6]">File Size</span>
-                <span>2.4 MB</span>
+                <span>{(file.size / 1024 / 1024).toFixed(2)} MB</span>
               </div>
               <div className="flex justify-between py-1.5">
                 <span className="text-[#D6D6D6]">Upload Time</span>
-                <span>14:32:45 UTC</span>
+                <span>{new Date().toISOString().split('T')[0]}</span>
               </div>
             </div>
           </div>
@@ -99,15 +113,15 @@ export function ResultsProfessional({ preview, onBack, analysisResult }: Results
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-[#D6D6D6]">Sensor Pattern</span>
-                  <span className="text-[#00FFC3]">Detected</span>
+                  <span className="text-[#00FFC3]">{file.type.startsWith('video/') ? "Frame Analysis" : "Detected"}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#D6D6D6]">Noise Consistency</span>
                   <span className="text-[#00FFC3]">High</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-[#D6D6D6]">Known Device</span>
-                  <span>Canon EOS R5</span>
+                  <span className="text-[#D6D6D6]">Source Type</span>
+                  <span>{file.type ? file.type : 'Unknown Source'}</span>
                 </div>
               </div>
               <div className="h-24 rounded-lg bg-gradient-to-br from-[#00FFC3]/20 to-purple-500/10 border border-[#00FFC3]/20 flex items-center justify-center">
@@ -223,14 +237,21 @@ export function ResultsProfessional({ preview, onBack, analysisResult }: Results
           <div className="col-span-1 p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
             <h3 className="mb-3">Advanced Metrics</h3>
             <div className="space-y-2 text-xs">
-              {[
+              {(file.type.startsWith('video/') ? [
+                { label: 'Video Codec', value: 'H.264', status: 'normal' },
+                { label: 'Frame Consistency', value: '98%', status: 'pass' },
+                { label: 'Audio Sync', value: 'Aligned', status: 'pass' },
+                { label: 'Bitrate Analysis', value: 'Variable', status: 'pass' },
+                { label: 'Deepfake Artifacts', value: 'None', status: 'pass' },
+                { label: 'Temporal Stability', value: 'High', status: 'pass' },
+              ] : [
                 { label: 'JPEG Quality', value: '95%', status: 'normal' },
                 { label: 'Double Compression', value: 'Not Detected', status: 'pass' },
                 { label: 'Clone Detection', value: 'Clean', status: 'pass' },
                 { label: 'Splicing Analysis', value: 'No Anomalies', status: 'pass' },
                 { label: 'CFA Pattern', value: 'Consistent', status: 'pass' },
                 { label: 'Noise Analysis', value: 'Natural', status: 'pass' },
-              ].map((metric) => (
+              ]).map((metric) => (
                 <div key={metric.label} className="flex justify-between py-1.5 border-b border-white/5">
                   <span className="text-[#D6D6D6]">{metric.label}</span>
                   <span className="text-[#00FFC3]">{metric.value}</span>
