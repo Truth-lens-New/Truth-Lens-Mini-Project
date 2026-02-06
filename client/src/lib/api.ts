@@ -166,7 +166,8 @@ export interface MediaAnalysisResponse {
     real_probability: number;
     fake_probability: number;
     model: string;
-    metadata?: Record<string, string | boolean>;
+    metadata?: Record<string, string | boolean | number>;
+    metadata_risk_score?: number;
     evidence?: string[];
     heatmap?: string;
 }

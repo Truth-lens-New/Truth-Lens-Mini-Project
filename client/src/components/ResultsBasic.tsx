@@ -74,7 +74,7 @@ export function ResultsBasic({ preview, onBack, analysisResult }: ResultsBasicPr
         </div>
 
         {/* Key Findings */}
-        <div className="grid grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-4 gap-6 mb-8">
           <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10">
             <div className="text-sm text-[#D6D6D6] mb-2">Model Confidence</div>
             <div className="text-3xl mb-1">{analysisResult.confidence}%</div>
@@ -93,6 +93,20 @@ export function ResultsBasic({ preview, onBack, analysisResult }: ResultsBasicPr
             <div className="text-sm text-[#D6D6D6] mb-2">Fake Probability</div>
             <div className="text-3xl mb-1">{analysisResult.fake_probability}%</div>
             <div className="text-xs text-[#D6D6D6]">Likelihood of manipulation</div>
+          </div>
+
+          <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10">
+            <div className="text-sm text-[#D6D6D6] mb-2">Metadata Risk</div>
+            <div className="text-3xl mb-1" style={{
+              color: (analysisResult.metadata_risk_score ?? 0) >= 60 ? '#FF6B6B' :
+                (analysisResult.metadata_risk_score ?? 0) >= 30 ? '#FFB86C' : '#00FFC3'
+            }}>
+              {analysisResult.metadata_risk_score ?? 0}/100
+            </div>
+            <div className="text-xs text-[#D6D6D6]">
+              {(analysisResult.metadata_risk_score ?? 0) >= 60 ? 'High AI indicators' :
+                (analysisResult.metadata_risk_score ?? 0) >= 30 ? 'Moderate risk' : 'Low risk'}
+            </div>
           </div>
         </div>
 

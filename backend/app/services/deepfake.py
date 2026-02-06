@@ -94,20 +94,53 @@ class DeepfakeDetector:
         self._model_loaded = True
 
     def _extract_metadata(self, image: Image.Image) -> dict:
-        """Extract metadata from image as evidence."""
+        """
+        Enhanced metadata extraction with comprehensive AI detection.
+        
+        Checks for:
+        - AI software signatures (40+ tools)
+        - Typical AI image dimensions
+        - Missing camera EXIF data
+        - PNG chunk analysis for generation parameters
+        - Calculated risk score
+        """
         metadata = {}
         evidence = []
+        risk_score = 0  # 0-100 scale, higher = more likely AI
         
         # Get basic image info
         metadata["format"] = image.format or "Unknown"
         metadata["mode"] = image.mode
         metadata["size"] = f"{image.width}x{image.height}"
         
-        # Try to get EXIF data
+        # ============================================
+        # 1. Comprehensive AI Software Detection
+        # ============================================
+        ai_software_signatures = [
+            # Stable Diffusion family
+            'stable diffusion', 'automatic1111', 'a1111', 'comfyui', 'invoke-ai',
+            'invokeai', 'fooocus', 'forge', 'vladmandic', 'easy diffusion',
+            # Commercial AI tools
+            'midjourney', 'dall-e', 'dalle', 'adobe firefly', 'bing image creator',
+            'leonardo.ai', 'leonardo ai', 'nightcafe', 'craiyon', 'wombo dream',
+            'artbreeder', 'deepai', 'playground ai', 'ideogram', 'flux',
+            # Open source models/tools
+            'novelai', 'nai diffusion', 'waifu diffusion', 'animagine',
+            'holara', 'pixai', 'tensor.art', 'civitai', 'runpod',
+            # Image editors with AI features
+            'photoshop', 'generative fill', 'neural filters',
+            'luminar', 'topaz', 'remini', 'gigapixel',
+            # Chinese AI tools
+            'baidu', 'tencent', 'alibaba', 'wanx', 'tongyi',
+            # Other indicators
+            'diffusion', 'txt2img', 'img2img', 'inpaint', 'upscale'
+        ]
+        
+        # Check EXIF data
+        exif_data = {}
         try:
             exif = image._getexif()
             if exif:
-                # Map EXIF tag IDs to names
                 from PIL.ExifTags import TAGS
                 for tag_id, value in exif.items():
                     tag = TAGS.get(tag_id, tag_id)
@@ -116,43 +149,166 @@ class DeepfakeDetector:
                             value = value.decode('utf-8', errors='ignore')
                         except:
                             value = str(value)
-                    if tag in ['Software', 'Make', 'Model', 'DateTime', 'Artist', 'Copyright']:
+                    exif_data[tag] = str(value)
+                    if tag in ['Software', 'Make', 'Model', 'DateTime', 'Artist', 
+                               'Copyright', 'ImageDescription', 'UserComment']:
                         metadata[tag] = str(value)
-                        
-                # Check for AI software indicators
-                software = metadata.get('Software', '').lower()
-                ai_indicators = ['stable diffusion', 'midjourney', 'dall-e', 'adobe firefly', 
-                               'automatic1111', 'comfyui', 'novelai', 'photoshop', 'gimp']
-                for indicator in ai_indicators:
-                    if indicator in software:
-                        evidence.append(f"Software '{metadata.get('Software')}' is commonly used for AI generation or manipulation")
-                        break
-        except Exception as e:
+        except Exception:
             pass
         
-        # Check image info dict
+        # Check software field for AI indicators
+        software = metadata.get('Software', '').lower()
+        for indicator in ai_software_signatures:
+            if indicator in software:
+                evidence.append(f"AI tool detected in metadata: '{metadata.get('Software')}'")
+                risk_score += 40
+                metadata['ai_software_detected'] = True
+                break
+        
+        # ============================================
+        # 2. Image Info / PNG Chunk Analysis
+        # ============================================
         try:
-            info = image.info
+            info = image.info or {}
+            
+            # Check for Stable Diffusion parameters (PNG tEXt chunks)
+            sd_param_keys = ['parameters', 'prompt', 'negative_prompt', 'steps', 
+                            'sampler', 'cfg_scale', 'seed', 'model', 'vae']
+            for key in sd_param_keys:
+                if key in info:
+                    evidence.append(f"AI generation parameter '{key}' found in image metadata")
+                    metadata['has_ai_params'] = True
+                    risk_score += 35
+                    break
+            
+            # Check Software in info dict
             if 'Software' in info:
+                software_info = str(info['Software']).lower()
                 metadata['Software'] = str(info['Software'])
-            if 'parameters' in info:  # Stable Diffusion puts generation params here
-                evidence.append("Image contains AI generation parameters in metadata")
-                metadata['has_ai_params'] = True
+                for indicator in ai_software_signatures:
+                    if indicator in software_info:
+                        if not metadata.get('ai_software_detected'):
+                            evidence.append(f"AI tool detected: '{info['Software']}'")
+                            risk_score += 40
+                            metadata['ai_software_detected'] = True
+                        break
+            
+            # Check Comment field
             if 'Comment' in info:
                 comment = str(info['Comment']).lower()
-                if any(ai in comment for ai in ['stable diffusion', 'ai generated', 'midjourney']):
+                ai_comment_indicators = ['stable diffusion', 'ai generated', 'midjourney',
+                                        'dall-e', 'generated by', 'created with ai']
+                if any(ai in comment for ai in ai_comment_indicators):
                     evidence.append("Image comment indicates AI generation")
-        except:
+                    risk_score += 30
+            
+            # Check for ComfyUI workflow
+            if 'workflow' in info or 'prompt' in info:
+                if 'comfyui' in str(info.get('workflow', '')).lower():
+                    evidence.append("ComfyUI workflow detected in metadata")
+                    risk_score += 35
+                    
+        except Exception:
             pass
         
-        # No EXIF = suspicious for photos
+        # ============================================
+        # 3. Typical AI Image Dimensions Check
+        # ============================================
+        ai_typical_dimensions = [
+            # Square formats (common for most AI tools)
+            (512, 512), (768, 768), (1024, 1024), (2048, 2048),
+            # SDXL and newer models
+            (1024, 1024), (896, 1152), (1152, 896),
+            (832, 1216), (1216, 832), (640, 1536), (1536, 640),
+            # Midjourney common sizes
+            (1024, 1792), (1792, 1024), (1456, 816), (816, 1456),
+            # DALL-E sizes
+            (256, 256), (512, 512), (1024, 1024),
+            # Portrait/Landscape AI ratios
+            (768, 1024), (1024, 768), (768, 1152), (1152, 768),
+            (576, 1024), (1024, 576), (640, 1024), (1024, 640)
+        ]
+        
+        current_dims = (image.width, image.height)
+        if current_dims in ai_typical_dimensions:
+            evidence.append(f"Dimensions {image.width}x{image.height} are typical for AI-generated images")
+            risk_score += 15
+            metadata['ai_typical_dimensions'] = True
+        
+        # Check for exact square aspect ratio (very common in AI)
+        if image.width == image.height and image.width >= 512:
+            if not metadata.get('ai_typical_dimensions'):
+                evidence.append(f"Perfect square dimensions ({image.width}x{image.height}) common in AI generation")
+                risk_score += 10
+        
+        # ============================================
+        # 4. Missing Camera EXIF Analysis
+        # ============================================
+        # Real camera photos typically have these EXIF fields
+        camera_exif_fields = {
+            'Make': 15,           # Camera manufacturer
+            'Model': 15,          # Camera model
+            'DateTime': 10,       # Capture date
+            'ExposureTime': 5,    # Shutter speed
+            'FNumber': 5,         # Aperture
+            'ISOSpeedRatings': 5, # ISO
+            'FocalLength': 5,     # Lens focal length
+            'Flash': 3,           # Flash info
+            'WhiteBalance': 3,    # White balance
+            'ExifImageWidth': 2,  # Original dimensions
+            'ExifImageHeight': 2  # Original dimensions
+        }
+        
+        missing_fields = []
+        missing_score = 0
+        for field, weight in camera_exif_fields.items():
+            if field not in exif_data:
+                missing_fields.append(field)
+                missing_score += weight
+        
+        # Calculate missing EXIF contribution to risk
+        if len(missing_fields) >= 8:
+            evidence.append(f"Missing {len(missing_fields)} camera EXIF fields - likely not from a camera")
+            risk_score += min(25, missing_score // 3)
+            metadata['missing_exif_fields'] = len(missing_fields)
+        elif len(missing_fields) >= 5:
+            evidence.append(f"Missing key camera metadata ({len(missing_fields)} fields)")
+            risk_score += min(15, missing_score // 4)
+        
+        # Specific checks for completely missing camera info
         if not metadata.get('Make') and not metadata.get('Model'):
-            evidence.append("No camera information found - typical for AI-generated images")
+            if 'No camera information' not in str(evidence):
+                evidence.append("No camera manufacturer/model found - typical for AI-generated images")
+                risk_score += 10
         
         if not metadata.get('DateTime'):
-            evidence.append("No original capture date found in metadata")
-            
-        return {"metadata": metadata, "evidence": evidence}
+            if 'No original capture date' not in str(evidence):
+                evidence.append("No original capture date found in metadata")
+                risk_score += 5
+        
+        # ============================================  
+        # 5. Additional Suspicious Patterns
+        # ============================================
+        # Check for very round file sizes (sometimes indicates generation)
+        # Check image mode
+        if image.mode == 'RGBA' and metadata.get('format') == 'PNG':
+            # PNG with alpha is common for AI art with transparent backgrounds
+            pass  # Neutral indicator
+        
+        # Cap risk score at 100
+        risk_score = min(100, risk_score)
+        
+        # Determine risk level
+        if risk_score >= 60:
+            metadata['metadata_risk_level'] = 'high'
+        elif risk_score >= 30:
+            metadata['metadata_risk_level'] = 'medium'
+        else:
+            metadata['metadata_risk_level'] = 'low'
+        
+        metadata['metadata_risk_score'] = risk_score
+        
+        return {"metadata": metadata, "evidence": evidence, "risk_score": risk_score}
 
     def _generate_heatmap(self, image_tensor, original_image):
         """Generate Grad-CAM heatmap."""
@@ -256,8 +412,40 @@ class DeepfakeDetector:
             # Determine verdict
             verdict = "FAKE" if predicted_class == 1 else "REAL"
             
-            # Add model-based evidence
+            # ============================================
+            # Integrate metadata risk score with model prediction
+            # ============================================
+            metadata_risk = meta_result.get("risk_score", 0)
             evidence = meta_result["evidence"].copy()
+            
+            # Adjust probabilities based on metadata evidence
+            # High metadata risk (≥60) suggests strong AI indicators
+            adjusted_fake_prob = fake_prob
+            if metadata_risk >= 60:
+                # Strong metadata evidence of AI - boost fake probability
+                adjustment = min(0.1, metadata_risk / 1000)  # Up to 10% boost
+                adjusted_fake_prob = min(0.99, fake_prob + adjustment)
+                evidence.insert(0, f"Metadata analysis indicates high AI risk ({metadata_risk}/100)")
+            elif metadata_risk >= 30:
+                # Moderate metadata evidence
+                evidence.insert(0, f"Metadata analysis indicates moderate AI risk ({metadata_risk}/100)")
+            else:
+                # Low metadata risk - slight confidence in real
+                if verdict == "REAL":
+                    evidence.insert(0, f"Metadata analysis supports authenticity ({metadata_risk}/100 risk)")
+            
+            # Re-evaluate verdict if metadata strongly contradicts model
+            # If model says REAL but metadata risk is very high (≥70), flag as uncertain
+            if verdict == "REAL" and metadata_risk >= 70:
+                evidence.insert(0, "⚠️ Warning: Model predicts REAL but metadata shows strong AI indicators")
+            
+            # If model is uncertain (low confidence) and metadata risk is high, lean toward FAKE
+            if confidence < 0.6 and metadata_risk >= 50:
+                if adjusted_fake_prob > real_prob:
+                    verdict = "FAKE"
+                    evidence.insert(0, "Combined analysis (model + metadata) suggests manipulation")
+            
+            # Add model-based evidence
             if verdict == "FAKE":
                 evidence.insert(0, f"Neural network detected manipulation patterns with {round(fake_prob * 100, 1)}% confidence")
             else:
@@ -266,22 +454,27 @@ class DeepfakeDetector:
             if heatmap_data_url:
                 evidence.append("Analysis heatmap generated showing focus regions")
 
-            # Confidence level description
-            if confidence >= 0.9:
+            # Confidence level description (now considers metadata)
+            combined_confidence = confidence
+            if metadata_risk >= 60 and verdict == "FAKE":
+                combined_confidence = min(0.99, confidence + 0.05)  # Boost confidence
+            
+            if combined_confidence >= 0.9:
                 confidence_level = "high"
-            elif confidence >= 0.7:
+            elif combined_confidence >= 0.7:
                 confidence_level = "medium"
             else:
                 confidence_level = "low"
             
             return {
                 "verdict": verdict,
-                "confidence": round(confidence * 100, 2),
+                "confidence": round(combined_confidence * 100, 2),
                 "confidence_level": confidence_level,
                 "real_probability": round(real_prob * 100, 2),
-                "fake_probability": round(fake_prob * 100, 2),
+                "fake_probability": round(adjusted_fake_prob * 100, 2),
                 "model": "EfficientNet-B0",
                 "metadata": meta_result["metadata"],
+                "metadata_risk_score": metadata_risk,
                 "evidence": evidence,
                 "heatmap": heatmap_data_url
             }
