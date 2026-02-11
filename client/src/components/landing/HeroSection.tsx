@@ -1,31 +1,46 @@
-import { motion, useTransform } from 'framer-motion';
-import { ArrowRight, ChevronDown, Play } from 'lucide-react';
+import { motion, useTransform, AnimatePresence } from 'framer-motion';
+import { ArrowRight, ChevronDown, Play, Globe, Layers, Zap, BarChart3 } from 'lucide-react';
 import { useLandingScroll } from './LandingScrollContext';
+import { useState } from 'react';
 import type { Page } from '../../App';
+import { HeroGlobe } from './HeroGlobe';
+import { HeroMorphingCards } from './HeroMorphingCards';
+import { HeroLiveAnalysis } from './HeroLiveAnalysis';
+import { HeroForensicsDash } from './HeroForensicsDash';
 
 interface HeroSectionProps {
     onNavigate: (page: Page) => void;
 }
 
+const VARIANTS = [
+    { id: 'globe', label: 'Globe', icon: Globe, component: HeroGlobe },
+    { id: 'cards', label: 'Cards', icon: Layers, component: HeroMorphingCards },
+    { id: 'live', label: 'Live', icon: Zap, component: HeroLiveAnalysis },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3, component: HeroForensicsDash },
+] as const;
+
 export function HeroSection({ onNavigate }: HeroSectionProps) {
     const { scrollYProgress } = useLandingScroll();
+    const [activeVariant, setActiveVariant] = useState(0);
 
     // Parallax effects based on scroll
     const y = useTransform(scrollYProgress, [0, 0.2], [0, 200]);
     const opacity = useTransform(scrollYProgress, [0, 0.15], [1, 0]);
     const scale = useTransform(scrollYProgress, [0, 0.2], [1, 0.9]);
 
+    const ActiveComponent = VARIANTS[activeVariant].component;
+
     return (
         <section className="relative h-screen min-h-[800px] flex items-center justify-center snap-start perspective-1000">
             {/* Background Ambience */}
             <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-                {/* Dark Mode: Supermemory "Void" */}
+                {/* Dark Mode */}
                 <div className="hidden dark:block absolute inset-0 bg-background">
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary/20 rounded-full blur-[120px] animate-pulse" />
                     <div className="absolute top-0 left-0 w-full h-full bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-transparent via-background/80 to-background" />
                 </div>
 
-                {/* Light Mode: Antigravity "Structure" */}
+                {/* Light Mode */}
                 <div className="dark:hidden absolute inset-0 bg-background">
                     <div className="absolute top-[-20%] right-[-10%] w-[800px] h-[800px] bg-gradient-to-br from-primary/5 to-transparent rounded-full blur-[100px]" />
                     <div className="absolute bottom-[-20%] left-[-10%] w-[600px] h-[600px] bg-gradient-to-tr from-accent/10 to-transparent rounded-full blur-[80px]" />
@@ -102,41 +117,56 @@ export function HeroSection({ onNavigate }: HeroSectionProps) {
                     </motion.div>
                 </div>
 
-                {/* Visual Side - "Artifact" */}
-                <div className="relative h-[400px] lg:h-[600px] w-full flex items-center justify-center perspective-[2000px]">
-                    {/* Central Cube / Sphere */}
+                {/* Visual Side */}
+                <div className="relative h-[500px] lg:h-[700px] w-full flex flex-col items-center justify-center">
+                    {/* Variant display area */}
+                    <div className="flex-1 w-full relative">
+                        <AnimatePresence mode="wait">
+                            <motion.div
+                                key={activeVariant}
+                                initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: -10 }}
+                                transition={{ duration: 0.4, ease: 'easeOut' }}
+                                className="absolute inset-0"
+                            >
+                                <ActiveComponent />
+                            </motion.div>
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Variant Switcher */}
                     <motion.div
-                        animate={{
-                            rotateY: [0, 360],
-                            rotateX: [0, 360, 0],
-                        }}
-                        transition={{ duration: 40, repeat: Infinity, ease: "linear" }}
-                        className="relative w-72 h-72 preserve-3d"
-                        style={{ transformStyle: 'preserve-3d' }}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.6, duration: 0.5 }}
+                        className="relative z-30 flex items-center gap-1 p-1 rounded-full bg-card/80 backdrop-blur-xl border border-border shadow-lg"
                     >
-                        {/* Faces of a "Glass Layout" - More delicate borders */}
-                        <div className="absolute inset-0 border border-primary/20 bg-primary/5 backdrop-blur-xl rounded-[2rem] shadow-[0_0_30px_-5px_var(--primary)]"
-                            style={{ transform: 'translateZ(100px)' }}></div>
-                        <div className="absolute inset-0 border border-accent/20 bg-accent/5 backdrop-blur-xl rounded-[2rem]"
-                            style={{ transform: 'rotateY(90deg) translateZ(100px)' }}></div>
-                        <div className="absolute inset-0 border border-white/10 dark:border-white/5 bg-white/5 backdrop-blur-md rounded-[2rem]"
-                            style={{ transform: 'rotateX(90deg) translateZ(100px)' }}></div>
-
-                        {/* Inner Core */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-gradient-to-tr from-primary/30 to-accent/30 rounded-full blur-[50px] animate-pulse"></div>
+                        {VARIANTS.map((variant, i) => {
+                            const Icon = variant.icon;
+                            const isActive = i === activeVariant;
+                            return (
+                                <button
+                                    key={variant.id}
+                                    onClick={() => setActiveVariant(i)}
+                                    className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-300 ${isActive
+                                        ? 'text-primary-foreground'
+                                        : 'text-muted-foreground hover:text-foreground'
+                                        }`}
+                                >
+                                    {isActive && (
+                                        <motion.div
+                                            layoutId="hero-variant-pill"
+                                            className="absolute inset-0 rounded-full bg-primary"
+                                            transition={{ type: 'spring', bounce: 0.2, duration: 0.5 }}
+                                        />
+                                    )}
+                                    <Icon className="w-3.5 h-3.5 relative z-10" />
+                                    <span className="relative z-10 hidden sm:inline">{variant.label}</span>
+                                </button>
+                            );
+                        })}
                     </motion.div>
-
-                    {/* Floating Orbitals - Thinner, more elegant */}
-                    <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 30, repeat: Infinity, ease: "linear" }}
-                        className="absolute w-[550px] h-[550px] border border-dashed border-primary/10 rounded-full pointer-events-none"
-                    />
-                    <motion.div
-                        animate={{ rotate: -360 }}
-                        transition={{ duration: 35, repeat: Infinity, ease: "linear" }}
-                        className="absolute w-[450px] h-[450px] border border-dashed border-accent/10 rounded-full pointer-events-none"
-                    />
                 </div>
             </motion.div>
 
