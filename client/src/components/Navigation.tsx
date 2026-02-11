@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { flushSync } from 'react-dom';
 import { User, LogOut, ChevronDown, Lock, Sun, Moon, LogIn, UserPlus, LayoutDashboard } from 'lucide-react';
 import { useTheme } from 'next-themes';
@@ -116,6 +116,25 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
     ? 'text-white/80 hover:text-white'
     : 'text-muted-foreground hover:text-foreground';
 
+  // Click outside handler for user menu
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showUserMenu]);
+
   return (
     <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 w-full max-w-4xl px-4">
       <nav className={navContainerClass}>
@@ -200,7 +219,7 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                   </button>
                 )}
 
-                <div className="relative ml-1">
+                <div className="relative ml-1" ref={menuRef}>
                   <button
                     onClick={() => setShowUserMenu(!showUserMenu)}
                     className={`flex items-center gap-2 pl-1 pr-2 py-1 rounded-full border transition-all ${isTransparentPage && isDark ? 'hover:bg-white/10 border-transparent hover:border-white/20' : 'hover:bg-foreground/5 border-transparent hover:border-border/20'}`}
@@ -212,17 +231,35 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                   </button>
 
                   {showUserMenu && (
-                    <div className={`absolute right-0 mt-3 w-64 rounded-2xl backdrop-blur-xl border shadow-xl overflow-hidden z-50 transform origin-top-right animate-in fade-in zoom-in-95 duration-200 ${isTransparentPage && isDark ? 'bg-black/90 border-white/10 shadow-black/40' : 'bg-card/95 border-border/50 shadow-black/10'}`}>
+                    <div className={`absolute right-0 mt-3 w-64 rounded-2xl backdrop-blur-3xl border shadow-2xl overflow-hidden z-50 transform origin-top-right animate-in fade-in zoom-in-95 duration-200 
+                      ${isTransparentPage && isDark
+                        ? 'bg-[#0a0a0a]/95 border-white/10 shadow-black/50'
+                        : 'bg-white/95 dark:bg-zinc-900/95 border-zinc-200 dark:border-zinc-800 shadow-xl dark:shadow-black/50'
+                      }`}>
+
                       {userEmail && (
-                        <div className={`px-5 py-4 border-b ${isTransparentPage && isDark ? 'border-white/10 bg-white/5' : 'border-border/40 bg-muted/30'}`}>
-                          <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 ${isTransparentPage && isDark ? 'text-white/40' : 'text-muted-foreground'}`}>Signed in as</div>
-                          <div className={`text-sm truncate font-medium ${isTransparentPage && isDark ? 'text-white' : 'text-foreground'}`}>{userEmail}</div>
+                        <div className={`px-5 py-4 border-b 
+                          ${isTransparentPage && isDark
+                            ? 'border-white/10 bg-white/5'
+                            : 'border-zinc-100 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-800/50'
+                          }`}>
+                          <div className={`text-[10px] uppercase font-bold tracking-wider mb-1 
+                            ${isTransparentPage && isDark ? 'text-zinc-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                            Signed in as
+                          </div>
+                          <div className={`text-sm truncate font-medium 
+                            ${isTransparentPage && isDark ? 'text-white' : 'text-zinc-900 dark:text-zinc-100'}`}>
+                            {userEmail}
+                          </div>
                         </div>
                       )}
 
                       {/* Mode Switcher in Dropdown */}
-                      <div className={`p-3 border-b ${isTransparentPage ? 'border-white/10' : 'border-border/40'}`}>
-                        <div className={`text-[10px] uppercase font-bold tracking-wider mb-2 px-2 ${isTransparentPage ? 'text-white/40' : 'text-muted-foreground'}`}>Account Type</div>
+                      <div className={`p-3 border-b ${isTransparentPage && isDark ? 'border-white/10' : 'border-zinc-100 dark:border-zinc-800'}`}>
+                        <div className={`text-[10px] uppercase font-bold tracking-wider mb-2 px-2 
+                          ${isTransparentPage && isDark ? 'text-zinc-400' : 'text-zinc-500 dark:text-zinc-400'}`}>
+                          Account Type
+                        </div>
                         <div className="grid grid-cols-1 gap-1">
                           {modes.map((mode) => {
                             const isLocked = mode !== 'Basic';
@@ -232,26 +269,35 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                                 key={mode}
                                 onClick={() => !isLocked && onModeChange(mode)}
                                 disabled={isLocked}
-                                className={`px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all ${isActive
-                                  ? isTransparentPage ? 'bg-[#00FFC3]/10 text-[#00FFC3] font-medium border border-[#00FFC3]/20' : 'bg-primary/10 text-primary font-medium border border-primary/20'
-                                  : isLocked
-                                    ? isTransparentPage ? 'text-white/20 cursor-not-allowed hover:bg-white/5' : 'text-muted-foreground/40 cursor-not-allowed hover:bg-muted/20'
-                                    : isTransparentPage ? 'text-white/60 hover:text-white hover:bg-white/10' : 'text-muted-foreground hover:text-foreground hover:bg-foreground/5'
+                                className={`px-3 py-2 rounded-lg text-xs flex items-center justify-between transition-all 
+                                  ${isActive
+                                    ? 'bg-primary/10 text-primary font-medium border border-primary/20'
+                                    : isLocked
+                                      ? isTransparentPage && isDark
+                                        ? 'text-zinc-600 cursor-not-allowed hover:bg-white/5'
+                                        : 'text-zinc-300 dark:text-zinc-700 cursor-not-allowed hover:bg-black/5 dark:hover:bg-white/5'
+                                      : isTransparentPage && isDark
+                                        ? 'text-zinc-300 hover:text-white hover:bg-white/10'
+                                        : 'text-zinc-600 dark:text-zinc-300 hover:text-zinc-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10'
                                   }`}
                               >
                                 <span>{mode}</span>
                                 {isLocked && <Lock className="w-3 h-3" />}
-                                {isActive && <div className={`w-1.5 h-1.5 rounded-full ${isTransparentPage ? 'bg-[#00FFC3]' : 'bg-primary'}`} />}
+                                {isActive && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
                               </button>
                             );
                           })}
                         </div>
                       </div>
 
-                      <div className="p-1.5">
+                      <div className="p-1.5 space-y-0.5">
                         <button
                           onClick={() => onNavigate('settings')}
-                          className={`w-full px-3 py-2 text-left text-sm rounded-xl transition-colors ${isTransparentPage ? 'text-white/70 hover:bg-white/10 hover:text-white' : 'text-muted-foreground hover:bg-foreground/5 hover:text-foreground'}`}
+                          className={`w-full px-3 py-2 text-left text-sm rounded-xl transition-colors font-medium
+                            ${isTransparentPage && isDark
+                              ? 'text-zinc-300 hover:bg-white/10 hover:text-white'
+                              : 'text-zinc-700 dark:text-zinc-300 hover:bg-black/5 dark:hover:bg-white/10 hover:text-zinc-900 dark:hover:text-white'
+                            }`}
                         >
                           Settings
                         </button>
@@ -260,7 +306,11 @@ export function Navigation({ currentPage, onNavigate, userMode, onModeChange, us
                             setShowUserMenu(false);
                             onLogout?.();
                           }}
-                          className={`w-full px-3 py-2 text-left text-sm rounded-xl flex items-center gap-2 transition-colors mt-0.5 ${isTransparentPage ? 'text-white/70 hover:bg-red-500/20 hover:text-red-400' : 'text-muted-foreground hover:bg-destructive/10 hover:text-destructive'}`}
+                          className={`w-full px-3 py-2 text-left text-sm rounded-xl flex items-center gap-2 transition-colors font-medium
+                            ${isTransparentPage && isDark
+                              ? 'text-red-400/90 hover:bg-red-500/10 hover:text-red-400'
+                              : 'text-red-600/90 dark:text-red-400/90 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-700 dark:hover:text-red-400'
+                            }`}
                         >
                           <LogOut className="w-3.5 h-3.5" />
                           Sign out

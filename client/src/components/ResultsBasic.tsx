@@ -1,4 +1,6 @@
-import { ArrowLeft, Download, CheckCircle2, ShieldAlert, ShieldCheck } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { motion, animate } from 'framer-motion';
+import { ArrowLeft, Download, ShieldAlert, ShieldCheck } from 'lucide-react';
 import type { MediaAnalysisResponse } from '../lib/api';
 import { ComparisonSlider } from './ComparisonSlider';
 
@@ -7,6 +9,41 @@ interface ResultsBasicProps {
   onBack: () => void;
   analysisResult: MediaAnalysisResponse;
   file: File;
+}
+
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 0.2
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: { type: "spring" as const, stiffness: 50, damping: 20 }
+  }
+};
+
+function AnimatedNumber({ value }: { value: number }) {
+  const [displayValue, setDisplayValue] = useState(0);
+
+  useEffect(() => {
+    const controls = animate(0, value, {
+      duration: 1.5,
+      ease: "easeOut",
+      onUpdate: (v) => setDisplayValue(Math.floor(v))
+    });
+    return controls.stop;
+  }, [value]);
+
+  return <span>{displayValue}</span>;
 }
 
 export function ResultsBasic({ preview, onBack, analysisResult, file }: ResultsBasicProps) {
@@ -24,33 +61,45 @@ export function ResultsBasic({ preview, onBack, analysisResult, file }: ResultsB
         <div className={`absolute top-40 left-1/4 w-[500px] h-[500px] ${isReal ? 'bg-[#00FFC3]/10 dark:bg-[#00FFC3]/5' : 'bg-[#FF6B6B]/10 dark:bg-[#FF6B6B]/5'} rounded-full blur-[140px] mix-blend-multiply dark:mix-blend-screen transition-colors duration-700`} />
       </div>
 
-      <div className="relative z-10 max-w-5xl mx-auto">
-        <button
+
+
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        className="relative z-10 max-w-5xl mx-auto"
+      >
+        <motion.button
+          variants={itemVariants}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
           onClick={onBack}
           className="mb-6 px-4 py-2 rounded-lg bg-white/80 dark:bg-white/5 border border-black/5 dark:border-white/10 hover:bg-black/5 dark:hover:bg-white/10 transition-colors flex items-center gap-2 text-gray-700 dark:text-gray-200 shadow-sm dark:shadow-none"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
-        </button>
+        </motion.button>
 
         {/* Verdict */}
-        <div className="text-center mb-12">
+        <motion.div variants={itemVariants} className="text-center mb-12">
           <div
             className="inline-flex items-center gap-3 px-6 py-3 rounded-full mb-4 bg-white/50 dark:bg-transparent backdrop-blur-sm border transition-colors"
             style={{
               backgroundColor: `${verdictColor}15`,
               borderColor: `${verdictColor}50`,
             }}
+            animate={{ boxShadow: [`0 0 0px ${verdictColor}00`, `0 0 20px ${verdictColor}40`, `0 0 0px ${verdictColor}00`] }}
+            transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
           >
             <VerdictIcon className="w-5 h-5" style={{ color: verdictColor }} />
             <span style={{ color: verdictColor, fontWeight: 500 }}>{statusText}</span>
           </div>
           <h1 className="text-5xl mb-4 font-bold tracking-tight" style={{ color: verdictColor }}>{verdictText}</h1>
           <p className="text-lg text-gray-600 dark:text-[#D6D6D6]">Our forensic AI has analyzed your media using {analysisResult.model}</p>
-        </div>
+        </motion.div>
 
         {/* Media Display with Slider */}
-        <div className="mb-8 p-1 rounded-3xl backdrop-blur-md bg-white/40 dark:bg-gradient-to-br dark:from-white/10 dark:to-white/5 border border-white/20 dark:border-white/10 overflow-hidden flex justify-center shadow-xl dark:shadow-none min-h-[400px] transition-all">
+        <motion.div variants={itemVariants} className="mb-8 p-1 rounded-3xl backdrop-blur-md bg-white/40 dark:bg-gradient-to-br dark:from-white/10 dark:to-white/5 border border-white/20 dark:border-white/10 overflow-hidden flex justify-center shadow-xl dark:shadow-none min-h-[400px] transition-all">
           {analysisResult.heatmap && preview ? (
             <ComparisonSlider
               original={preview}
@@ -74,13 +123,13 @@ export function ResultsBasic({ preview, onBack, analysisResult, file }: ResultsB
               />
             )
           )}
-        </div>
+        </motion.div>
 
         {/* Key Findings */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 text-center md:text-left">
+        <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 text-center md:text-left">
           <div className="p-6 rounded-2xl backdrop-blur-md bg-white/60 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm dark:shadow-none transition-colors">
             <div className="text-sm text-gray-500 dark:text-muted-foreground mb-2">Model Confidence</div>
-            <div className="text-3xl mb-1 font-mono text-gray-900 dark:text-white">{analysisResult.confidence}%</div>
+            <div className="text-3xl mb-1 font-mono text-gray-900 dark:text-white"><AnimatedNumber value={analysisResult.confidence} />%</div>
             <div className="text-xs font-semibold" style={{ color: verdictColor }}>
               {analysisResult.confidence_level.charAt(0).toUpperCase() + analysisResult.confidence_level.slice(1)} confidence
             </div>
@@ -88,19 +137,20 @@ export function ResultsBasic({ preview, onBack, analysisResult, file }: ResultsB
 
           <div className="p-6 rounded-2xl backdrop-blur-md bg-white/60 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm dark:shadow-none transition-colors">
             <div className="text-sm text-gray-500 dark:text-muted-foreground mb-2">Real Probability</div>
-            <div className="text-3xl mb-1 font-mono text-gray-900 dark:text-white">{analysisResult.real_probability}%</div>
+            <div className="text-3xl mb-1 font-mono text-gray-900 dark:text-white"><AnimatedNumber value={analysisResult.real_probability} />%</div>
             <div className="text-xs text-gray-500 dark:text-muted-foreground">Likelihood of authenticity</div>
           </div>
 
           <div className="p-6 rounded-2xl backdrop-blur-md bg-white/60 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm dark:shadow-none transition-colors">
             <div className="text-sm text-gray-500 dark:text-muted-foreground mb-2">Fake Probability</div>
-            <div className="text-3xl mb-1 font-mono text-gray-900 dark:text-white">{analysisResult.fake_probability}%</div>
+            <div className="text-3xl mb-1 font-mono text-gray-900 dark:text-white"><AnimatedNumber value={analysisResult.fake_probability} />%</div>
             <div className="text-xs text-gray-500 dark:text-muted-foreground">Likelihood of manipulation</div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Recommendation & Evidence */}
-        <div
+        <motion.div
+          variants={itemVariants}
           className="p-8 rounded-2xl backdrop-blur-md border mb-8 bg-white/40 dark:bg-transparent transition-colors"
           style={{
             background: `linear-gradient(to bottom right, ${verdictColor}10, transparent)`,
@@ -138,10 +188,10 @@ export function ResultsBasic({ preview, onBack, analysisResult, file }: ResultsB
               )}
             </div>
           </div>
-        </div>
+        </motion.div>
 
         {/* Feature 4: Real Forensic Metadata */}
-        <div className="mb-8 p-8 rounded-2xl backdrop-blur-md bg-white/60 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm dark:shadow-none transition-colors">
+        <motion.div variants={itemVariants} className="mb-8 p-8 rounded-2xl backdrop-blur-md bg-white/60 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm dark:shadow-none transition-colors">
           <h3 className="text-xl mb-4 text-gray-900 dark:text-white">Forensic Metadata</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             {/* Real File Metadata */}
@@ -179,14 +229,19 @@ export function ResultsBasic({ preview, onBack, analysisResult, file }: ResultsB
                 </div>
               ))}
           </div>
-        </div>
+        </motion.div>
 
         {/* Export */}
-        <button className="w-full py-4 rounded-xl bg-gradient-to-r from-[#00FFC3] to-[#99F8FF] text-black hover:shadow-[0_0_40px_rgba(0,255,195,0.4)] transition-all flex items-center justify-center gap-2 shadow-sm">
+        <motion.button
+          variants={itemVariants}
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="w-full py-4 rounded-xl bg-gradient-to-r from-[#00FFC3] to-[#99F8FF] text-black hover:shadow-[0_0_40px_rgba(0,255,195,0.4)] transition-all flex items-center justify-center gap-2 shadow-sm"
+        >
           <Download className="w-5 h-5" />
           <span>Export Forensic Report</span>
-        </button>
-      </div>
-    </div>
+        </motion.button>
+      </motion.div>
+    </div >
   );
 }

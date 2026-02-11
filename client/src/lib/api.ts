@@ -1,14 +1,11 @@
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:7000';
+export const API_URL = import.meta.env.VITE_API_URL || '';
 
-export interface User {
-    id: string;
-    email: string;
-}
+// export interface User removed to avoid duplicate
 
 export interface AuthResponse {
     access_token: string;
     token_type: string;
-    user?: User;
+    user?: any; // Avoiding circular dependency or type issues, or use UserStats
 }
 
 export interface AnalyzeRequest {
@@ -94,8 +91,37 @@ async function authFetch(url: string, options: RequestInit = {}) {
 
 // --- Auth ---
 
-export async function getUserStats(): Promise<any> {
+
+export interface UserStats {
+    id: number;
+    email: string;
+    full_name?: string;
+    avatar_url?: string;
+    preferences?: {
+        theme?: 'light' | 'dark' | 'system';
+        notifications?: boolean;
+        public_profile?: boolean;
+        auto_save_history?: boolean; // new preference
+        detailed_explanations?: boolean; // new preference
+        [key: string]: any;
+    };
+    member_since: string;
+    total_analyses: number;
+}
+
+export type User = UserStats; // Alias for compatibility if needed elsewhere
+
+// --- Auth ---
+
+export async function getUserStats(): Promise<UserStats> {
     return authFetch('/auth/me');
+}
+
+export async function updateProfile(data: Partial<UserStats> & { password?: string }): Promise<UserStats> {
+    return authFetch('/auth/me', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    });
 }
 
 export async function login(data: { email?: string; password?: string }): Promise<AuthResponse> {

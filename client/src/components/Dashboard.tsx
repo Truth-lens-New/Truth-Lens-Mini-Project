@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from "framer-motion";
 import {
   Search,
   Image,
@@ -74,6 +75,33 @@ const getVerdictIcon = (verdict: string) => {
   if (v.includes('disputed') || v.includes('mixed')) return { icon: AlertTriangle, color: '#f59e0b' };
   return { icon: HelpCircle, color: '#6366f1' };
 };
+
+// Animation Variants
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.08,
+      delayChildren: 0.1,
+    }
+  }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: {
+    opacity: 1,
+    y: 0,
+    transition: {
+      type: "spring" as const,
+      stiffness: 50,
+      damping: 20
+    }
+  }
+};
+
+const hoverScale = { scale: 1.02, transition: { duration: 0.2 } };
 
 // Floating Particle Animation for Dark Mode (Option F)
 // Floating Particle Animation for Dark Mode (Option F)
@@ -214,13 +242,17 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
 
   return (
     <div className="min-h-screen pb-20 relative">
-      {/* Floating Particles for Dark Mode */}
       <ParticleField />
 
       <div className="relative z-10 max-w-7xl mx-auto px-6 pt-8">
         {/* Header */}
         <header className="mb-12">
-          <div className="flex items-end justify-between">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+            className="flex items-end justify-between"
+          >
             <div>
               <div className="text-xs font-mono uppercase tracking-[0.3em] text-muted-foreground/60 mb-3">
                 Forensic Intelligence Platform
@@ -235,14 +267,21 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
                 {stats?.email?.split('@')[0] || 'Agent'}
               </div>
             </div>
-          </div>
+          </motion.div>
         </header>
 
         {/* Bento Grid */}
-        <div className="grid grid-cols-12 gap-4 mb-8">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-12 gap-4 mb-8"
+        >
 
           {/* Primary CTA - Investigate */}
-          <div
+          <motion.div
+            variants={itemVariants}
+            whileHover={hoverScale}
             onClick={() => onNavigate('investigate')}
             className="col-span-12 md:col-span-8 group relative p-8 rounded-2xl overflow-hidden transition-all duration-500 text-left cursor-pointer
               border border-primary/30 bg-gradient-to-br from-primary/10 via-card/50 to-card/30 backdrop-blur-sm
@@ -315,10 +354,13 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
                 </button>
               </form>
             </div>
-          </div>
+          </motion.div>
 
           {/* Personal Stats Ring (Option B) */}
-          <div className="col-span-6 md:col-span-4 row-span-2 p-6 rounded-2xl backdrop-blur-sm
+          <motion.div
+            variants={itemVariants}
+            whileHover={hoverScale}
+            className="col-span-6 md:col-span-4 row-span-2 p-6 rounded-2xl backdrop-blur-sm
             border border-border/50 bg-card/50
             dark:border-border/30 dark:bg-gradient-to-br dark:from-card/80 dark:to-card/40
             dark:shadow-[0_0_40px_-10px] dark:shadow-primary/20
@@ -385,10 +427,13 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
                 </div>
               </div>
             </div>
-          </div>
+          </motion.div>
 
           {/* Verify Media */}
-          <button
+          <motion.button
+            variants={itemVariants}
+            whileHover={hoverScale}
+            whileTap={{ scale: 0.98 }}
             onClick={() => onNavigate('verify-media')}
             className="col-span-6 md:col-span-4 group p-6 rounded-2xl backdrop-blur-sm transition-all duration-300 text-left relative
               border border-border/50 bg-card/50 hover:border-violet-400/50 hover:bg-card/80 hover:shadow-lg hover:shadow-violet-500/10
@@ -410,11 +455,14 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
             <p className="text-xs text-muted-foreground leading-relaxed">
               Deepfake & manipulation detection
             </p>
-          </button>
+          </motion.button>
 
           {/* View History */}
           {/* History Button (Restored to Slot) */}
-          <button
+          <motion.button
+            variants={itemVariants}
+            whileHover={hoverScale}
+            whileTap={{ scale: 0.98 }}
             onClick={() => onNavigate('history')}
             className="col-span-6 md:col-span-4 group p-6 rounded-2xl backdrop-blur-sm transition-all duration-300 text-left relative flex flex-col justify-between
               border border-border/50 bg-card/50 hover:border-border hover:shadow-lg
@@ -436,15 +484,22 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
             <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
               <ArrowUpRight className="w-4 h-4 text-muted-foreground" />
             </div>
-          </button>
-        </div>
+          </motion.button>
+        </motion.div>
 
         {/* Bottom Row - Activity Feed + Pipeline + Verdict Distribution */}
-        <div className="grid grid-cols-12 gap-4">
+        <motion.div
+          variants={containerVariants}
+          initial="hidden"
+          animate="show"
+          className="grid grid-cols-12 gap-4"
+        >
 
 
           {/* Pipeline Visualization */}
-          <div className="col-span-12 p-6 rounded-2xl backdrop-blur-sm relative
+          <motion.div
+            variants={itemVariants}
+            className="col-span-12 p-6 rounded-2xl backdrop-blur-sm relative
             border border-border/50 bg-card/30
             dark:border-primary/20 dark:bg-gradient-to-br dark:from-primary/5 dark:via-card/50 dark:to-card/30
             dark:shadow-[0_0_50px_-15px] dark:shadow-primary/25
@@ -459,7 +514,13 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
               </div>
               <div className="flex items-center gap-1.5">
                 <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse dark:shadow-[0_0_10px_2px] dark:shadow-emerald-400/50" />
-                <span className="text-xs text-emerald-400">Operational</span>
+                <motion.span
+                  animate={{ opacity: [0.7, 1, 0.7] }}
+                  transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                  className="text-xs text-emerald-400"
+                >
+                  Operational
+                </motion.span>
               </div>
             </div>
 
@@ -484,10 +545,12 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
                 </div>
               ))}
             </div>
-          </div>
+          </motion.div>
 
           {/* Verdict Distribution */}
-          <div className="col-span-12 p-6 rounded-2xl backdrop-blur-sm relative
+          <motion.div
+            variants={itemVariants}
+            className="col-span-12 p-6 rounded-2xl backdrop-blur-sm relative
             border border-border/50 bg-card/30
             dark:border-border/30 dark:bg-gradient-to-br dark:from-card/60 dark:to-card/30
             dark:shadow-[0_0_40px_-15px] dark:shadow-white/10
@@ -517,8 +580,8 @@ export function Dashboard({ onNavigate, userMode }: DashboardProps) {
                 </div>
               ))}
             </div>
-          </div>
-        </div>
+          </motion.div>
+        </motion.div>
 
         {/* Footer */}
         <footer className="mt-12 pt-8 border-t border-border/30 dark:border-white/10">
