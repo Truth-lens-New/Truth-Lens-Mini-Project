@@ -19,8 +19,6 @@ RUN pip install --no-cache-dir torch torchvision --index-url https://download.py
 # 2. Install remaining dependencies (forcing CPU usage for ML libs)
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install PyTorch CPU
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 # Download spaCy model
 RUN python -m spacy download en_core_web_sm
