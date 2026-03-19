@@ -42,8 +42,10 @@ groq>=0.4.0
 # Image Processing & Deepfake Detection
 pillow>=10.0.0
 opencv-python-headless>=4.8.0
-numpy>=1.24.0
+numpy>=1.24.0,<2.0.0
 timm>=1.0.0
 
-# PyTorch CPU-only (install separately with):
-# pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# PyTorch CPU-only
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.0+cpu
+torchvision==0.19.0+cpu
