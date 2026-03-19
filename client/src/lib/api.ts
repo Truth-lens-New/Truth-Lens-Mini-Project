@@ -1,14 +1,11 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+export const API_URL = import.meta.env.VITE_API_URL || '';
 
-export interface User {
-    id: string;
-    email: string;
-}
+// export interface User removed to avoid duplicate
 
 export interface AuthResponse {
     access_token: string;
     token_type: string;
-    user?: User;
+    user?: any; // Avoiding circular dependency or type issues, or use UserStats
 }
 
 export interface AnalyzeRequest {
@@ -56,6 +53,8 @@ export interface AnalyzeResponse {
 export interface HistoryItem {
     id: number;
     claim: string;
+    input_text?: string;
+    input_url?: string;
     verdict: string;
     confidence: string;
     explanation?: string;
@@ -91,6 +90,39 @@ async function authFetch(url: string, options: RequestInit = {}) {
 }
 
 // --- Auth ---
+
+
+export interface UserStats {
+    id: number;
+    email: string;
+    full_name?: string;
+    avatar_url?: string;
+    preferences?: {
+        theme?: 'light' | 'dark' | 'system';
+        notifications?: boolean;
+        public_profile?: boolean;
+        auto_save_history?: boolean; // new preference
+        detailed_explanations?: boolean; // new preference
+        [key: string]: any;
+    };
+    member_since: string;
+    total_analyses: number;
+}
+
+export type User = UserStats; // Alias for compatibility if needed elsewhere
+
+// --- Auth ---
+
+export async function getUserStats(): Promise<UserStats> {
+    return authFetch('/auth/me');
+}
+
+export async function updateProfile(data: Partial<UserStats> & { password?: string }): Promise<UserStats> {
+    return authFetch('/auth/me', {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+    });
+}
 
 export async function login(data: { email?: string; password?: string }): Promise<AuthResponse> {
     const response = await fetch(`${API_URL}/auth/login`, {
@@ -157,6 +189,109 @@ export async function clearAllHistory(): Promise<void> {
     });
 }
 
+// === V3 API (TruthLens Investigation Pipeline) ===
+
+export interface V3InvestigateRequest {
+    text: string;
+}
+
+export interface V3EvidenceItem {
+    text_preview: string;
+    source_url?: string;
+    source_domain: string;
+    source_type: string;
+    stance: 'supports' | 'refutes' | 'neutral';
+    stance_confidence?: number;
+    trust_score: number;
+}
+
+export interface V3VerifiedClaim {
+    original_text: string;
+    claim_type: string;
+    verdict: 'verified_true' | 'verified_false' | 'disputed' | 'unverified' | 'insufficient_evidence' | 'not_checkable' | 'developing';
+    confidence: number;
+    evidence_summary: string;
+    evidence_count: number;
+    sources_checked: number;
+    investigation_time_ms: number;
+    evidence: V3EvidenceItem[];
+    strategy_stats?: Record<string, any>;
+    evidence_strategy?: string;
+}
+
+export interface V3InvestigateResponse {
+    success: boolean;
+    verified_claims: V3VerifiedClaim[];
+    metadata: {
+        input_type: string;
+        total_processing_time_ms: number;
+        claims_found: number;
+        claims_verified: number;
+        investigated_at: string;
+    };
+}
+
+export interface V3AnalyzeResponse {
+    input_type: string;
+    claims: {
+        original_text: string;
+        claim_type: string;
+        type_confidence: number;
+        is_checkable: boolean;
+        evidence_strategy: string;
+        status: string;
+    }[];
+    total_claims: number;
+    checkable_claims: number;
+}
+
+/**
+ * Analyze text using V3 pipeline - extracts and classifies claims
+ */
+export async function analyzeClaimV3(text: string): Promise<V3AnalyzeResponse> {
+    const response = await fetch(`${API_URL}/api/v3/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+        throw new Error('Analysis failed');
+    }
+
+    return response.json();
+}
+
+/**
+ * Investigate a claim using V3 pipeline - full evidence gathering and verdict
+ */
+export async function investigateClaim(content: string, inputType: 'text' | 'url' | 'image' = 'text'): Promise<V3InvestigateResponse> {
+    const token = localStorage.getItem('token');
+    const headers: HeadersInit = {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+
+    const response = await fetch(`${API_URL}/api/v3/investigate`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ content, input_type: inputType }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        // Handle Pydantic validation errors (array of objects) and string errors
+        let errorMessage = 'Investigation failed';
+        if (Array.isArray(errorData.detail)) {
+            errorMessage = errorData.detail.map((e: any) => e.msg || e.message || JSON.stringify(e)).join(', ');
+        } else if (typeof errorData.detail === 'string') {
+            errorMessage = errorData.detail;
+        }
+        throw new Error(errorMessage);
+    }
+
+    return await response.json();
+}
 // --- Media Analysis (Deepfake Detection) ---
 
 export interface MediaAnalysisResponse {
@@ -166,8 +301,7 @@ export interface MediaAnalysisResponse {
     real_probability: number;
     fake_probability: number;
     model: string;
-    metadata?: Record<string, string | boolean | number>;
-    metadata_risk_score?: number;
+    metadata?: Record<string, string | boolean>;
     evidence?: string[];
     heatmap?: string;
 }
@@ -196,5 +330,13 @@ export async function analyzeMedia(file: File): Promise<MediaAnalysisResponse> {
         throw new Error(errorData.detail || 'Media analysis failed');
     }
 
+    return response.json();
+}
+
+/**
+ * Check V3 API health
+ */
+export async function checkV3Health(): Promise<{ status: string; version: string; phase: number }> {
+    const response = await fetch(`${API_URL}/api/v3/health`);
     return response.json();
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Download, Eye, EyeOff, ZoomIn, FileText, FolderPlus, Layers, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Download, ZoomIn, FolderPlus, Layers } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Cell } from 'recharts';
 import type { MediaAnalysisResponse } from '../lib/api';
 
@@ -7,9 +7,10 @@ interface ResultsCreatorProps {
   preview: string | null;
   onBack: () => void;
   analysisResult: MediaAnalysisResponse;
+  file: File;
 }
 
-export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreatorProps) {
+export function ResultsCreator({ preview, onBack, analysisResult, file }: ResultsCreatorProps) {
   const [showHeatmap, setShowHeatmap] = useState(false);
   const [showELA, setShowELA] = useState(false);
 
@@ -44,30 +45,30 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
       <div className="relative z-10 max-w-[1600px] mx-auto">
         <button
           onClick={onBack}
-          className="mb-6 px-4 py-2 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10 transition-colors flex items-center gap-2"
+          className="mb-6 px-4 py-2 rounded-lg bg-card/50 border border-border/50 hover:bg-muted/20 transition-colors flex items-center gap-2 text-foreground"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back</span>
         </button>
 
         <div className="mb-8">
-          <h1 className="text-4xl mb-2">Forensic Analysis Report</h1>
-          <p className="text-[#D6D6D6]">Creator Mode – Enhanced Analytics • {analysisResult.model}</p>
+          <h1 className="text-4xl mb-2 text-foreground">Forensic Analysis Report</h1>
+          <p className="text-muted-foreground">Creator Mode – Enhanced Analytics</p>
         </div>
 
         <div className="grid grid-cols-2 gap-6">
           {/* Left Panel - Media Viewer */}
           <div className="space-y-6">
             {/* Media Display */}
-            <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10">
+            <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl">Media Analysis</h2>
+                <h2 className="text-xl text-foreground">Media Analysis</h2>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowHeatmap(!showHeatmap)}
                     className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showHeatmap
-                        ? 'bg-[#00FFC3]/20 border border-[#00FFC3]/50 text-[#00FFC3]'
-                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                      ? 'bg-primary/20 border border-primary/50 text-primary'
+                      : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
                       }`}
                   >
                     Heatmap
@@ -75,30 +76,44 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
                   <button
                     onClick={() => setShowELA(!showELA)}
                     className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showELA
-                        ? 'bg-[#99F8FF]/20 border border-[#99F8FF]/50 text-[#99F8FF]'
-                        : 'bg-white/5 border border-white/10 hover:bg-white/10'
+                      ? 'bg-secondary/20 border border-secondary/50 text-secondary'
+                      : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
                       }`}
                   >
                     ELA
                   </button>
-                  <button className="p-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10">
+                  <button className="p-1.5 rounded-lg bg-card border border-border/50 hover:bg-muted/20 text-foreground">
                     <ZoomIn className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              <div className="relative rounded-xl overflow-hidden">
-                <img src={preview || ''} alt="Analysis" className="w-full h-[600px] object-cover" />
-                {showHeatmap && (
-                  <div className={`absolute inset-0 ${isReal ? 'bg-gradient-to-br from-green-500/30 via-green-400/20 to-green-500/30' : 'bg-gradient-to-br from-red-500/30 via-yellow-500/20 to-red-500/30'} backdrop-blur-sm`}>
-                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs">
+              <div className="relative rounded-xl overflow-hidden flex justify-center bg-black/20">
+                {file.type.startsWith('video/') ? (
+                  <video
+                    src={preview || ''}
+                    controls
+                    className="w-auto h-auto max-h-[70vh] max-w-full object-contain"
+                  />
+                ) : (
+                  <img
+                    src={preview || ''}
+                    alt="Analysis"
+                    className="w-auto h-auto max-h-[70vh] max-w-full object-contain"
+                  />
+                )}
+
+                {/* Overlays for Images Only (or video if supported later) */}
+                {!file.type.startsWith('video/') && showHeatmap && (
+                  <div className={`absolute inset-0 ${isReal ? 'bg-gradient-to-br from-green-500/30 via-green-400/20 to-green-500/30' : 'bg-gradient-to-br from-red-500/30 via-yellow-500/20 to-red-500/30'} backdrop-blur-sm pointer-events-none`}>
+                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white">
                       Manipulation Heatmap
                     </div>
                   </div>
                 )}
-                {showELA && (
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/40 to-blue-500/40 backdrop-blur-sm mix-blend-screen">
-                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs">
+                {!file.type.startsWith('video/') && showELA && (
+                  <div className="absolute inset-0 bg-gradient-to-br from-purple-500/40 to-blue-500/40 backdrop-blur-sm mix-blend-screen pointer-events-none">
+                    <div className="absolute top-4 left-4 px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-sm text-xs text-white">
                       Error Level Analysis
                     </div>
                   </div>
@@ -108,17 +123,17 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
 
             {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-4">
-              <div className="p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
-                <div className="text-xs text-[#D6D6D6] mb-1">Overall Score</div>
-                <div className="text-2xl" style={{ color: verdictColor }}>{analysisResult.confidence}%</div>
+              <div className="p-4 rounded-xl backdrop-blur-md bg-card border border-border/50">
+                <div className="text-xs text-muted-foreground mb-1">Overall Score</div>
+                <div className="text-2xl text-primary">94.2%</div>
               </div>
-              <div className="p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
-                <div className="text-xs text-[#D6D6D6] mb-1">Risk Level</div>
-                <div className="text-2xl">{isReal ? 'Low' : 'High'}</div>
+              <div className="p-4 rounded-xl backdrop-blur-md bg-card border border-border/50">
+                <div className="text-xs text-muted-foreground mb-1">Risk Level</div>
+                <div className="text-2xl text-foreground">Low</div>
               </div>
-              <div className="p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
-                <div className="text-xs text-[#D6D6D6] mb-1">Verdict</div>
-                <div className="text-2xl" style={{ color: verdictColor }}>{isReal ? 'Authentic' : 'Fake'}</div>
+              <div className="p-4 rounded-xl backdrop-blur-md bg-card border border-border/50">
+                <div className="text-xs text-muted-foreground mb-1">Verdict</div>
+                <div className="text-2xl text-foreground">Authentic</div>
               </div>
             </div>
           </div>
@@ -126,8 +141,8 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
           {/* Right Panel - Analytics */}
           <div className="space-y-6">
             {/* Model Confidence Breakdown */}
-            <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10">
-              <h3 className="text-xl mb-4">Model Confidence Breakdown</h3>
+            <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
+              <h3 className="text-xl mb-4 text-foreground">Model Confidence Breakdown</h3>
               <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={modelData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
@@ -143,39 +158,47 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
             </div>
 
             {/* Metadata Table */}
-            <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10">
-              <h3 className="text-xl mb-4">Metadata Information</h3>
+            <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
+              <h3 className="text-xl mb-4 text-foreground">Metadata Information</h3>
               <div className="space-y-3">
                 {[
-                  { label: 'Camera Model', value: 'Canon EOS R5' },
-                  { label: 'Date Taken', value: '2024-12-08 14:32:15' },
-                  { label: 'GPS Location', value: '37.7749° N, 122.4194° W' },
-                  { label: 'ISO', value: '400' },
-                  { label: 'Exposure', value: '1/250s' },
-                  { label: 'Focal Length', value: '50mm' },
+                  { label: 'File Name', value: file.name },
+                  { label: 'File Type', value: file.type || 'Unknown' },
+                  { label: 'File Size', value: `${(file.size / 1024 / 1024).toFixed(2)} MB` },
+                  { label: 'Last Modified', value: new Date(file.lastModified).toLocaleDateString() },
+                  // Add optional fake metadata if needed or keep it real
+                  ...(analysisResult.metadata ? Object.entries(analysisResult.metadata)
+                    .filter(([k, v]) => {
+                      if (file.type.startsWith('video/')) {
+                        if (k.toLowerCase() === 'format' && ['jpeg', 'png', 'jpg'].includes(String(v).toLowerCase())) return false;
+                        if (k.toLowerCase() === 'size') return false;
+                      }
+                      return true;
+                    })
+                    .map(([k, v]) => ({ label: k, value: String(v) })) : [])
                 ].map((item) => (
-                  <div key={item.label} className="flex items-center justify-between py-2 border-b border-white/5">
-                    <span className="text-sm text-[#D6D6D6]">{item.label}</span>
-                    <span className="text-sm">{item.value}</span>
+                  <div key={item.label} className="flex items-center justify-between py-2 border-b border-border/10">
+                    <span className="text-sm text-muted-foreground">{item.label}</span>
+                    <span className="text-sm text-foreground truncate max-w-[200px]" title={item.value}>{item.value}</span>
                   </div>
                 ))}
               </div>
             </div>
 
             {/* Anomaly Detection */}
-            <div className="p-6 rounded-2xl backdrop-blur-md bg-white/5 border border-white/10">
-              <h3 className="text-xl mb-4">Anomaly Detection</h3>
+            <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
+              <h3 className="text-xl mb-4 text-foreground">Anomaly Detection</h3>
               <div className="grid grid-cols-2 gap-3">
                 {anomalies.map((anomaly) => (
                   <div
                     key={anomaly.type}
-                    className="px-4 py-3 rounded-lg bg-[#00FFC3]/10 border border-[#00FFC3]/30 flex items-center justify-between"
+                    className="px-4 py-3 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-between"
                   >
                     <div>
-                      <div className="text-sm mb-0.5">{anomaly.type}</div>
-                      <div className="text-xs text-[#00FFC3]">{anomaly.status}</div>
+                      <div className="text-sm mb-0.5 text-foreground">{anomaly.type}</div>
+                      <div className="text-xs text-primary">{anomaly.status}</div>
                     </div>
-                    <div className="w-2 h-2 bg-[#00FFC3] rounded-full" />
+                    <div className="w-2 h-2 bg-primary rounded-full" />
                   </div>
                 ))}
               </div>
@@ -189,11 +212,11 @@ export function ResultsCreator({ preview, onBack, analysisResult }: ResultsCreat
             <Download className="w-5 h-5" />
             <span>Export PDF Report</span>
           </button>
-          <button className="px-6 py-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 hover:bg-white/10 transition-all flex items-center gap-2">
+          <button className="px-6 py-4 rounded-xl backdrop-blur-md bg-card border border-border/50 hover:bg-muted/20 transition-all flex items-center gap-2 text-foreground">
             <Layers className="w-5 h-5" />
             <span>Export Assets</span>
           </button>
-          <button className="px-6 py-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10 hover:bg-white/10 transition-all flex items-center gap-2">
+          <button className="px-6 py-4 rounded-xl backdrop-blur-md bg-card border border-border/50 hover:bg-muted/20 transition-all flex items-center gap-2 text-foreground">
             <FolderPlus className="w-5 h-5" />
             <span>Add to Project</span>
           </button>

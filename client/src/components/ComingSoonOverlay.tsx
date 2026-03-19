@@ -12,7 +12,7 @@ export function ComingSoonOverlay({ children, title = "Coming Soon" }: ComingSoo
             </div>
 
             {/* Overlay */}
-            <div className="absolute inset-0 bg-black/80 flex items-center justify-center">
+            <div className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm flex items-center justify-center">
                 <div className="text-center">
                     <div className="w-16 h-16 mx-auto mb-6 rounded-full border-2 border-[#00FFC3] flex items-center justify-center">
                         <svg className="w-8 h-8 text-[#00FFC3]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
