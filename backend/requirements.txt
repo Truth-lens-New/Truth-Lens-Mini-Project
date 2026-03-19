@@ -27,7 +27,25 @@ python-multipart>=0.0.6
 # Validation
 email-validator>=2.1.0
 
+<<<<<<< HEAD
 # Image Processing
+=======
+# Phase 1 ML Dependencies
+transformers>=4.36.0
+sentence-transformers>=2.2.2
+trafilatura>=1.6.0
+easyocr>=1.7.1
+
+# Phase 2B Dependencies
+ddgs
+
+# Stage 0 LLM Enhancement (Groq - Free Llama 3.1)
+groq>=0.4.0
+
+# Phase 2B Deepfake Dependencies (Uday's Feature)
+timm>=0.9.12
+opencv-python-headless>=4.8.0
+>>>>>>> cf3361a (feat: upgrade to OpenFake trained B3 model and add comprehensive ML evaluation suites)
 pillow>=10.0.0
 opencv-python-headless>=4.8.0
 numpy>=1.24.0

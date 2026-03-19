@@ -50,6 +50,24 @@ services:
       - /app/node_modules
     depends_on:
       - backend
+    develop:
+      watch:
+        - action: sync
+          path: ./client/src
+          target: /app/src
+        - action: rebuild
+          path: ./client/package.json
+
+  client-prod:
+    build:
+      context: ./client
+      dockerfile: Dockerfile.prod
+    container_name: truthlens_client_prod
+    restart: unless-stopped
+    ports:
+      - "8081:80"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

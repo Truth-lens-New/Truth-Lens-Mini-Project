@@ -47,18 +47,21 @@ class DeepfakeDetector:
             
         if model_path is None:
             # Default path relative to backend directory
-            model_path = Path(__file__).parent.parent.parent / "models" / "best_effnetb0.pth"
+            model_path = Path(__file__).parent.parent.parent / "models" / "efficientnet_b3_production.pth"
         
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"Deepfake detector using device: {self.device}")
         
-        # Load EfficientNet-B0 using timm (matches your trained model architecture)
-        self.model = timm.create_model('efficientnet_b0', pretrained=False, num_classes=2)
+        # Load EfficientNet-B3 using timm
+        self.model = timm.create_model('efficientnet_b3', pretrained=False, num_classes=2)
         
-        # Load trained weights
+        # Load trained weights (handles both raw state_dicts and training checkpoints)
         try:
-            state_dict = torch.load(model_path, map_location=self.device, weights_only=True)
-            self.model.load_state_dict(state_dict)
+            checkpoint = torch.load(model_path, map_location=self.device, weights_only=False)
+            if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+                self.model.load_state_dict(checkpoint["model_state_dict"])
+            else:
+                self.model.load_state_dict(checkpoint)
             print(f"Model loaded successfully from {model_path}")
         except Exception as e:
             print(f"Error loading model: {e}")
@@ -67,9 +70,9 @@ class DeepfakeDetector:
         self.model.to(self.device)
         self.model.eval()
         
-        # Standard ImageNet preprocessing for EfficientNet
+        # Standard ImageNet preprocessing for EfficientNet (B3 optimal resolution is 300x300)
         self.transform = transforms.Compose([
-            transforms.Resize((224, 224)),
+            transforms.Resize((300, 300)),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=[0.485, 0.456, 0.406],
@@ -472,7 +475,7 @@ class DeepfakeDetector:
                 "confidence_level": confidence_level,
                 "real_probability": round(real_prob * 100, 2),
                 "fake_probability": round(adjusted_fake_prob * 100, 2),
-                "model": "EfficientNet-B0",
+                "model": "EfficientNet-B3",
                 "metadata": meta_result["metadata"],
                 "metadata_risk_score": metadata_risk,
                 "evidence": evidence,
