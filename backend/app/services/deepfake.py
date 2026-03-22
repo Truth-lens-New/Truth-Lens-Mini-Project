@@ -4,18 +4,20 @@ Deepfake Detection Service
 Uses EfficientNet-B0 model trained to detect deepfake images.
 """
 
+import asyncio
+import functools
+import io
+import base64
+from pathlib import Path
+from typing import Optional
+
+import cv2
+import numpy as np
 import torch
 import torch.nn as nn
 from torchvision import transforms
 import timm
 from PIL import Image
-import io
-from pathlib import Path
-
-
-import cv2
-import numpy as np
-import base64
 
 class DeepfakeDetector:
     """
@@ -501,26 +503,56 @@ class DeepfakeDetector:
 
 
 # Global detector instance (lazy loaded)
-_detector: DeepfakeDetector = None
+_detector: Optional[DeepfakeDetector] = None
+# Cached error string if model init fails — prevents confusing silent retry loops
+_init_error: Optional[str] = None
 
 
 def get_deepfake_detector() -> DeepfakeDetector:
-    """Get or create the global deepfake detector instance."""
-    global _detector
+    """
+    Get or create the global deepfake detector instance.
+
+    If the model previously failed to load, raises RuntimeError immediately
+    with a clear message instead of retrying inside PyTorch.
+    """
+    global _detector, _init_error
+
+    if _init_error is not None:
+        raise RuntimeError(
+            f"Deepfake model failed to load at startup: {_init_error}"
+        )
+
     if _detector is None:
-        _detector = DeepfakeDetector()
+        try:
+            _detector = DeepfakeDetector()
+        except Exception as exc:
+            _init_error = str(exc)  # cache so next call surfaces it fast
+            raise RuntimeError(
+                f"Deepfake model failed to load: {exc}"
+            ) from exc
+
     return _detector
 
 
-async def analyze_image_for_deepfake(image_bytes: bytes) -> dict:
+async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
     """
     Async wrapper for deepfake detection.
-    
+
+    PyTorch inference (forward + Grad-CAM backward) is CPU-bound and can
+    take several seconds. Running it directly inside an async function blocks
+    FastAPI's event loop. We offload to the default ThreadPoolExecutor instead.
+
     Args:
         image_bytes: Raw image bytes
-        
+        content_type: MIME type — used to route image vs video
+
     Returns:
         Detection result dictionary
     """
     detector = get_deepfake_detector()
-    return detector.predict(image_bytes)
+    loop = asyncio.get_event_loop()
+
+    # Offload CPU-intensive ML inference to a thread pool
+    return await loop.run_in_executor(
+        None, functools.partial(detector.predict, image_bytes)
+    )

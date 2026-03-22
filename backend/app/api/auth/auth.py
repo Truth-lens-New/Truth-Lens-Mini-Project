@@ -47,10 +47,21 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 
+class UpdateProfileRequest(BaseModel):
+    """User profile update request."""
+    full_name: str | None = None
+    avatar_url: str | None = None
+    preferences: dict | None = None
+    password: str | None = None  # To change password if needed
+
+
 class ProfileResponse(BaseModel):
     """User profile response with stats."""
     id: int
     email: str
+    full_name: str | None = None
+    avatar_url: str | None = None
+    preferences: dict | None = None
     member_since: datetime
     total_analyses: int
 
@@ -84,6 +95,64 @@ async def get_current_user_profile(
     return ProfileResponse(
         id=user.id,
         email=user.email,
+        full_name=user.full_name,
+        avatar_url=user.avatar_url,
+        preferences=user.preferences or {},
+        member_since=user.created_at,
+        total_analyses=total_analyses
+    )
+
+
+
+@router.patch("/me", response_model=ProfileResponse)
+async def update_profile(
+    request: UpdateProfileRequest,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Update current user's profile.
+    """
+    user_id = current_user['user_id']
+    
+    # Get user
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+        
+    # Update fields
+    if request.full_name is not None:
+        user.full_name = request.full_name
+    
+    if request.avatar_url is not None:
+        user.avatar_url = request.avatar_url
+        
+    if request.preferences is not None:
+        # Merge existing preferences with new ones
+        current_prefs = dict(user.preferences) if user.preferences else {}
+        current_prefs.update(request.preferences)
+        user.preferences = current_prefs
+        
+    if request.password:
+        user.hashed_password = hash_password(request.password)
+        
+    await db.commit()
+    await db.refresh(user)
+    
+    # Get stats for response
+    count_result = await db.execute(
+        select(func.count()).select_from(Check).where(Check.user_id == user_id)
+    )
+    total_analyses = count_result.scalar() or 0
+    
+    return ProfileResponse(
+        id=user.id,
+        email=user.email,
+        full_name=user.full_name,
+        avatar_url=user.avatar_url,
+        preferences=user.preferences or {},
         member_since=user.created_at,
         total_analyses=total_analyses
     )

@@ -1,4 +1,4 @@
-# TruthLens - Collaboration Guidelines
+                                                                                                                                                               # TruthLens - Collaboration Guidelines
 
 ## 👥 Team
 

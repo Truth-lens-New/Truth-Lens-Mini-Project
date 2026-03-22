@@ -1,37 +1,13 @@
-# Dependencies - installed fresh in Docker
 node_modules/
-
-# Build output
 dist/
-build/
-
-# IDE/Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Git
-.git/
-.gitignore
-
-# Docker
-Dockerfile
-.dockerignore
-
-# Logs
-*.log
+dist_client/
+.vite/
 npm-debug.log*
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Testing
-coverage/
-.nyc_output/
-
-# Environment files
+yarn-debug.log*
+yarn-error.log*
+.npm
+.pnpm-store
+.env
 .env.local
 .env.development.local
 .env.test.local

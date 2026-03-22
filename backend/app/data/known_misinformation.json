@@ -1,0 +1,130 @@
+{
+    "vaccines_autism": {
+        "patterns": [
+            "vaccine",
+            "autism",
+            "cause"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.99,
+        "reason": "Extensively debunked. Original 1998 Wakefield study was retracted due to fraud. Multiple large-scale studies (including 2019 Danish study of 650,000+ children) found no link.",
+        "sources": [
+            "CDC",
+            "WHO",
+            "Lancet retraction",
+            "Danish Pediatrics Study 2019"
+        ]
+    },
+    "5g_covid": {
+        "patterns": [
+            "5g",
+            "covid",
+            "coronavirus",
+            "cause",
+            "spread"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.99,
+        "reason": "Conspiracy theory with no scientific basis. COVID-19 is caused by SARS-CoV-2 virus, which cannot be transmitted via radio waves. 5G is electromagnetic radiation, not a pathogen.",
+        "sources": [
+            "WHO",
+            "IEEE",
+            "Multiple fact-checkers"
+        ]
+    },
+    "flat_earth": {
+        "patterns": [
+            "earth",
+            "flat"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.99,
+        "reason": "The Earth is approximately spherical (oblate spheroid). Proven by satellite imagery, physics, and centuries of scientific observation.",
+        "sources": [
+            "NASA",
+            "ESA",
+            "Basic physics"
+        ]
+    },
+    "microchip_vaccine": {
+        "patterns": [
+            "microchip",
+            "vaccine",
+            "bill gates",
+            "track"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.99,
+        "reason": "No vaccines contain microchips. The technology to inject tracking devices via standard needles does not exist. Originated as conspiracy theory.",
+        "sources": [
+            "Multiple fact-checkers",
+            "Medical experts"
+        ]
+    },
+    "ivermectin_covid_cure": {
+        "patterns": [
+            "ivermectin",
+            "cure",
+            "covid",
+            "treatment"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.95,
+        "reason": "No credible evidence that ivermectin is effective against COVID-19. FDA, WHO, and major medical organizations advise against its use for COVID treatment.",
+        "sources": [
+            "FDA",
+            "WHO",
+            "Cochrane Review"
+        ]
+    },
+    "drinking_bleach_cure": {
+        "patterns": [
+            "bleach",
+            "cure",
+            "drink",
+            "coronavirus",
+            "covid"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.99,
+        "reason": "Extremely dangerous misinformation. Drinking bleach is toxic and can cause severe injury or death. There is no safe way to consume bleach.",
+        "sources": [
+            "FDA",
+            "Poison Control Centers",
+            "Medical consensus"
+        ]
+    },
+    "climate_change_hoax": {
+        "patterns": [
+            "climate change",
+            "hoax",
+            "fake",
+            "not real"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.98,
+        "reason": "Climate change is supported by overwhelming scientific consensus (97%+ of climate scientists). Evidence includes rising temperatures, sea levels, and atmospheric CO2.",
+        "sources": [
+            "IPCC",
+            "NASA",
+            "NOAA",
+            "Scientific consensus"
+        ]
+    },
+    "moon_landing_fake": {
+        "patterns": [
+            "moon landing",
+            "fake",
+            "hoax",
+            "staged"
+        ],
+        "verdict": "VERIFIED_FALSE",
+        "confidence": 0.99,
+        "reason": "Apollo missions are well-documented with extensive evidence including lunar samples, retroreflectors, and third-party verification from multiple countries.",
+        "sources": [
+            "NASA",
+            "Independent verification",
+            "Lunar samples"
+        ]
+    }
+}
