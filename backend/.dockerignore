@@ -1,46 +1,22 @@
-# Virtual environment - DO NOT copy to Docker
 venv/
 .venv/
-env/
-.env/
 __pycache__/
-*.py[cod]
-*$py.class
 *.pyc
-
-# IDE/Editor
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# Testing
+*.pyo
+*.pyd
+.Python
 .pytest_cache/
 .coverage
-htmlcov/
+.cache
 .tox/
-
-# Git
-.git/
-.gitignore
-
-# Docker
-Dockerfile
-.dockerignore
-
-# Logs
-*.log
-logs/
-
-# Local data that shouldn't be in the image
-*.db
-*.sqlite3
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Build artifacts
+.nox/
+.hypothesis/
+.mypy_cache/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
 dist/
 build/
-*.egg-info/
+tests/
+database/init/

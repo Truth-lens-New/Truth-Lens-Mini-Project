@@ -28,8 +28,8 @@ python-multipart>=0.0.6
 email-validator>=2.1.0
 
 # Phase 1 ML Dependencies
+# NOTE: torch/torchvision are installed via Dockerfile (CPU wheel URL) — do not add here
 transformers>=4.36.0
-torch>=2.1.0
 sentence-transformers>=2.2.2
 trafilatura>=1.6.0
 easyocr>=1.7.1
@@ -40,7 +40,9 @@ ddgs
 # Stage 0 LLM Enhancement (Groq - Free Llama 3.1)
 groq>=0.4.0
 
-# Phase 2B Deepfake Dependencies (Uday's Feature)
-timm>=0.9.12
+# Deepfake Detection – Image/Video Processing (Uday's Feature)
+# timm>=1.0.0 is the minimum — do not downgrade to 0.9.x
+timm>=1.0.0
 opencv-python-headless>=4.8.0
 pillow>=10.0.0
+numpy>=1.24.0

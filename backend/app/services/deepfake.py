@@ -4,20 +4,20 @@ Deepfake Detection Service
 Uses EfficientNet-B0 model trained to detect deepfake images.
 """
 
+import asyncio
+import functools
+import io
+import base64
+from pathlib import Path
+from typing import Optional
+
+import cv2
+import numpy as np
 import torch
 import torch.nn as nn
 from torchvision import transforms
 import timm
 from PIL import Image
-import io
-from pathlib import Path
-
-
-import cv2
-import numpy as np
-import base64
-import tempfile
-import os
 
 class DeepfakeDetector:
     """
@@ -292,103 +292,6 @@ class DeepfakeDetector:
             print(f"Prediction error: {e}")
             raise ValueError(f"Failed to process image: {str(e)}")
     
-    def predict_video(self, video_bytes: bytes) -> dict:
-        """
-        Analyze a video file by extracting frames and averaging predictions.
-        
-        Args:
-            video_bytes: Raw video content
-            
-        Returns:
-            Aggregated prediction result
-        """
-        # Save bytes to temp file because cv2.VideoCapture requires path
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as temp_file:
-            temp_file.write(video_bytes)
-            temp_path = temp_file.name
-            
-        try:
-            cap = cv2.VideoCapture(temp_path)
-            if not cap.isOpened():
-                raise ValueError("Could not open video file")
-                
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            fps = cap.get(cv2.CAP_PROP_FPS) or 30
-            duration = frame_count / fps
-            
-            # Extract 5 evenly spaced frames
-            frames_to_extract = 5
-            extracted_frames = []
-            frame_indices = np.linspace(0, frame_count - 1, frames_to_extract, dtype=int)
-            
-            for index in frame_indices:
-                cap.set(cv2.CAP_PROP_POS_FRAMES, index)
-                ret, frame = cap.read()
-                if ret:
-                    # Convert BGR (OpenCV) to RGB (PIL)
-                    frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    pil_image = Image.fromarray(frame_rgb)
-                    
-                    # Store bytes for predict() reuse
-                    img_byte_arr = io.BytesIO()
-                    pil_image.save(img_byte_arr, format='JPEG')
-                    extracted_frames.append(img_byte_arr.getvalue())
-                    
-            cap.release()
-            
-            if not extracted_frames:
-                raise ValueError("Could not extract any frames from video")
-                
-            # Run prediction on each frame
-            results = []
-            for frame_bytes in extracted_frames:
-                try:
-                    results.append(self.predict(frame_bytes))
-                except Exception as e:
-                    print(f"Skipping bad frame: {e}")
-                    
-            if not results:
-                raise ValueError("Analysis failed on all extracted frames")
-                
-            # Aggregate results
-            avg_conf = np.mean([r["confidence"] for r in results])
-            avg_real = np.mean([r["real_probability"] for r in results])
-            avg_fake = np.mean([r["fake_probability"] for r in results])
-            
-            # Use the frame with highest confidence (or "fakeness") as the representative result (heatmap etc)
-            # If any frame is strongly fake (>80%), treat video as fake
-            max_fake_result = max(results, key=lambda x: x["fake_probability"])
-            
-            # Final Verdict Logic for Video:
-            # If average fake prob > 50% OR if we found a highly suspicious frame
-            if avg_fake > 50 or max_fake_result["fake_probability"] > 80:
-                final_verdict = "FAKE"
-                final_conf = max(avg_conf, max_fake_result["confidence"]) # Be cautious
-                # Use the fake frame evidence
-                final_result = max_fake_result.copy()
-            else:
-                final_verdict = "REAL"
-                final_conf = avg_conf
-                # Use the first frame as representative
-                final_result = results[0].copy()
-                
-            final_result["verdict"] = final_verdict
-            final_result["confidence"] = round(final_conf, 2)
-            final_result["real_probability"] = round(avg_real, 2)
-            final_result["fake_probability"] = round(avg_fake, 2)
-            
-            # Enhance Evidence
-            final_result["evidence"].insert(0, f"Video Analysis: Processed {len(extracted_frames)} frames. Average Fake Probability: {round(avg_fake, 1)}%")
-            if max_fake_result["fake_probability"] > 80:
-                 final_result["evidence"].append(f"Suspicious Content: Frame at index {results.index(max_fake_result)} showed high signs of manipulation.")
-            
-            return final_result
-            
-        finally:
-            # Cleanup temp file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-    
     def predict_from_file(self, file_path: str) -> dict:
         """
         Predict from a file path.
@@ -404,51 +307,56 @@ class DeepfakeDetector:
 
 
 # Global detector instance (lazy loaded)
-_detector: DeepfakeDetector = None
+_detector: Optional[DeepfakeDetector] = None
+# Cached error string if model init fails — prevents confusing silent retry loops
+_init_error: Optional[str] = None
 
 
 def get_deepfake_detector() -> DeepfakeDetector:
-    """Get or create the global deepfake detector instance."""
-    global _detector
+    """
+    Get or create the global deepfake detector instance.
+
+    If the model previously failed to load, raises RuntimeError immediately
+    with a clear message instead of retrying inside PyTorch.
+    """
+    global _detector, _init_error
+
+    if _init_error is not None:
+        raise RuntimeError(
+            f"Deepfake model failed to load at startup: {_init_error}"
+        )
+
     if _detector is None:
-        _detector = DeepfakeDetector()
+        try:
+            _detector = DeepfakeDetector()
+        except Exception as exc:
+            _init_error = str(exc)  # cache so next call surfaces it fast
+            raise RuntimeError(
+                f"Deepfake model failed to load: {exc}"
+            ) from exc
+
     return _detector
 
 
 async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
     """
     Async wrapper for deepfake detection.
-    
+
+    PyTorch inference (forward + Grad-CAM backward) is CPU-bound and can
+    take several seconds. Running it directly inside an async function blocks
+    FastAPI's event loop. We offload to the default ThreadPoolExecutor instead.
+
     Args:
-        image_bytes: Raw image or video bytes
-        content_type: MIME type of the file
-        
+        image_bytes: Raw image bytes
+        content_type: MIME type — used to route image vs video
+
     Returns:
         Detection result dictionary
     """
     detector = get_deepfake_detector()
-    
-    if "video" in content_type.lower():
-        result = detector.predict_video(image_bytes)
-    else:
-        result = detector.predict(image_bytes)
-        
-    # Phase 6: Explainable AI (Gemini Vision)
-    try:
-        from app.services.investigation.explanation import get_explanation_service
-        explainer = get_explanation_service()
-        
-        # Only explain if we have a clear verdict (optional, but good for saving tokens)
-        ai_explanation = await explainer.explain_media(
-            image_bytes, 
-            result["verdict"], 
-            result["confidence"]
-        )
-        
-        # Insert as top evidence
-        result["evidence"].insert(0, f"AI Forensic Analysis: {ai_explanation}")
-        
-    except Exception as e:
-        print(f"Explanation injection failed: {e}")
-        
-    return result
+    loop = asyncio.get_event_loop()
+
+    # Offload CPU-intensive ML inference to a thread pool
+    return await loop.run_in_executor(
+        None, functools.partial(detector.predict, image_bytes)
+    )

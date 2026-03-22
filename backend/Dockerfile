@@ -9,7 +9,11 @@ RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
+# Install PyTorch CPU-only FIRST so that deps like sentence-transformers
+# find torch already satisfied and skip pulling the full CUDA wheel from PyPI
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
+
+# Install remaining Python dependencies (torch is already present, no CUDA download)
 COPY requirements.txt .
 
 # 1. Install CPU-only PyTorch first (saves ~4GB)
@@ -18,9 +22,6 @@ RUN pip install --no-cache-dir torch torchvision --index-url https://download.py
 
 # 2. Install remaining dependencies (forcing CPU usage for ML libs)
 RUN pip install --no-cache-dir -r requirements.txt
-
-# Install PyTorch CPU
-RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu
 
 # Download spaCy model
 RUN python -m spacy download en_core_web_sm
