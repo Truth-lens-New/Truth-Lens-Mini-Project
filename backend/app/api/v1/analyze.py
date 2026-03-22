@@ -298,6 +298,8 @@ class MediaAnalysisResponse(BaseModel):
     fake_probability: float = Field(..., description="Probability of being fake (0-100)")
     model: str = Field(..., description="Model used for detection")
     metadata: dict = Field(default={}, description="Image metadata (EXIF, format, etc.)")
+    metadata_risk_score: Optional[int] = Field(default=None, description="Metadata AI risk score (0-100)")
+    patch_analysis: Optional[dict] = Field(default=None, description="Multi-patch analysis results")
     evidence: list = Field(default=[], description="Evidence points supporting the verdict")
     heatmap: Optional[str] = Field(default=None, description="Base64 encoded Grad-CAM heatmap")
 
