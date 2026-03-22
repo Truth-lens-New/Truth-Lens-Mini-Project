@@ -4,6 +4,7 @@ import { useLandingScroll } from './LandingScrollContext';
 import { useState } from 'react';
 import type { Page } from '../../App';
 import { HeroGlobe } from './HeroGlobe';
+import { HeroGlobe3D } from './HeroGlobe3D';
 import { HeroMorphingCards } from './HeroMorphingCards';
 import { HeroLiveAnalysis } from './HeroLiveAnalysis';
 import { HeroForensicsDash } from './HeroForensicsDash';
@@ -13,6 +14,7 @@ interface HeroSectionProps {
 }
 
 const VARIANTS = [
+    { id: 'globe3d', label: '3D Globe', icon: Globe, component: HeroGlobe3D },
     { id: 'globe', label: 'Globe', icon: Globe, component: HeroGlobe },
     { id: 'cards', label: 'Cards', icon: Layers, component: HeroMorphingCards },
     { id: 'live', label: 'Live', icon: Zap, component: HeroLiveAnalysis },

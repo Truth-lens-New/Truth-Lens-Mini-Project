@@ -4,7 +4,7 @@ TruthLens Backend Configuration
 Loads environment variables and provides typed settings for the application.
 """
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import List
 import json
 
@@ -12,8 +12,11 @@ import json
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
     
-    # Database
-    database_url: str = "postgresql+asyncpg://truthlens:truthlens_secret@localhost:5432/truthlens"
+    # Database (Legacy/External)
+    postgres_user: str = "truthlens"
+    postgres_password: str = "truthlens_secret"
+    postgres_db: str = "truthlens"
+    database_url: str = "postgresql+asyncpg://truthlens:truthlens_secret@postgres:5432/truthlens"
     
     # JWT
     jwt_secret_key: str = "your_super_secret_jwt_key_change_in_production"
@@ -24,6 +27,7 @@ class Settings(BaseSettings):
     gemini_api_key: str = ""
     google_factcheck_api_key: str = ""
     gnews_api_key: str = ""
+    groq_api_key: str = ""
     
     # CORS
     backend_cors_origins: str = '["http://localhost:5173","http://localhost:3000"]'
@@ -42,9 +46,11 @@ class Settings(BaseSettings):
     # Pipeline versioning
     pipeline_version: str = "0.1.0"
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = False
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=False,
+        extra="ignore"
+    )
 
 
 # Global settings instance

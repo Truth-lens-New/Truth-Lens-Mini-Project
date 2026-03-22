@@ -323,7 +323,7 @@ async def analyze_media(
         MediaAnalysisResponse with verdict and confidence scores
     """
     # Validate file type
-    allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp"]
+    allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp", "video/mp4", "video/quicktime", "video/webm"]
     if file.content_type not in allowed_types:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -334,15 +334,15 @@ async def analyze_media(
     try:
         contents = await file.read()
         
-        # Check file size (max 10MB)
-        if len(contents) > 10 * 1024 * 1024:
+        # Check file size (max 50MB for video)
+        if len(contents) > 50 * 1024 * 1024:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File too large. Maximum size is 10MB."
+                detail="File too large. Maximum size is 50MB."
             )
         
         # Run deepfake detection
-        result = await analyze_image_for_deepfake(contents)
+        result = await analyze_image_for_deepfake(contents, content_type=file.content_type)
         
         # Save to history
         try:

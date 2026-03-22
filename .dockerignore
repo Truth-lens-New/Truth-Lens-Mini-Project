@@ -1,0 +1,65 @@
+# Git
+.git
+.gitignore
+
+# Python
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+env/
+bin/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+venv/
+.venv/
+.pytest_cache/
+.coverage
+.cache
+.tox/
+.nox/
+.hypothesis/
+.mypy_cache/
+
+# Node
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.pnpm-store
+
+# Vite
+.vite/
+dist_client/
+
+# Project Specific
+backend/venv/
+backend/.venv/
+client/node_modules/
+data/
+docker-compose.yml
+.env
+.env.*
+Dockerfile
+.dockerignore
+CONTRIBUTING.md
+README.md
+docs/
+.agent/
