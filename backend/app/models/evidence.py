@@ -34,7 +34,7 @@ class Stance(str, Enum):
 
 
 class Verdict(str, Enum):
-    """Final verdict on a claim."""
+    """Final verdict on a clllaim."""
     VERIFIED_TRUE = "verified_true"
     VERIFIED_FALSE = "verified_false"
     DISPUTED = "disputed"
