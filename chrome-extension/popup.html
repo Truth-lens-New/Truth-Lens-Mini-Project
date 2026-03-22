@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TruthLens Verifier</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="hero">
+        <p class="eyebrow">
+          <span class="status-dot"></span>
+          SYSTEM V3.0 ONLINE
+        </p>
+        <h1>
+          Truth<span class="hero-gradient">Lens</span><br />
+          Claim Verifier
+        </h1>
+        <p class="hero-sub">Forensic-grade verification, now in-browser.</p>
+      </header>
+
+      <section class="card">
+        <label for="backendUrl">Backend URL</label>
+        <div class="row">
+          <input id="backendUrl" type="text" placeholder="http://localhost:8000" />
+          <button id="saveUrl" class="secondary">Save</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <p class="card-title">Account</p>
+        <label for="email">Email</label>
+        <input id="email" type="email" placeholder="you@example.com" />
+
+        <label for="password">Password</label>
+        <input id="password" type="password" placeholder="Your password" />
+
+        <div class="row">
+          <button id="loginBtn">Login</button>
+          <button id="registerBtn" class="secondary">Register</button>
+          <button id="logoutBtn" class="danger">Logout</button>
+        </div>
+        <button id="importWebToken" class="ghost">Use Web Login</button>
+        <p id="authStatus" class="muted"></p>
+      </section>
+
+      <section class="card">
+        <div class="row between">
+          <p class="card-title">Quick Verify</p>
+          <button id="grabSelection" class="secondary small">Use selected text</button>
+        </div>
+        <textarea id="claimInput" rows="4" placeholder="Paste a claim or select text in any page, then click Use selected text."></textarea>
+        <button id="verifyBtn">Verify Claim</button>
+        <div id="result" class="result muted">No result yet.</div>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
