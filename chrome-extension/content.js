@@ -6,7 +6,12 @@ let cardEl = null;
 
 function sendRuntimeMessage(payload) {
   return new Promise((resolve) => {
+    const timeout = setTimeout(() => {
+      resolve({ ok: false, error: "Extension did not respond in time. Please reload the page." });
+    }, 30000);
+
     chrome.runtime.sendMessage(payload, (response) => {
+      clearTimeout(timeout);
       if (chrome.runtime.lastError) {
         resolve({ ok: false, error: chrome.runtime.lastError.message });
         return;
@@ -18,7 +23,11 @@ function sendRuntimeMessage(payload) {
 
 function cleanupFloatingUi() {
   if (buttonEl) {
-    buttonEl.remove();
+    try {
+      buttonEl.remove();
+    } catch (e) {
+      // Element may have already been removed
+    }
     buttonEl = null;
   }
 }
@@ -43,34 +52,17 @@ function renderResultCard(html) {
     cardEl.style.boxShadow = "0 24px 46px rgba(3,8,18,0.66), 0 0 24px rgba(47,124,255,0.2)";
     cardEl.style.fontFamily = "\"Sora\", \"Space Grotesk\", sans-serif";
     cardEl.style.color = "#e8f1ff";
-
-    const closeBtn = document.createElement("button");
-    closeBtn.textContent = "×";
-    closeBtn.setAttribute("aria-label", "Close TruthLens panel");
-    closeBtn.style.position = "absolute";
-    closeBtn.style.right = "11px";
-    closeBtn.style.top = "8px";
-    closeBtn.style.border = "none";
-    closeBtn.style.background = "transparent";
-    closeBtn.style.cursor = "pointer";
-    closeBtn.style.color = "#8fb8ff";
-    closeBtn.style.fontSize = "16px";
-    closeBtn.addEventListener("click", () => cardEl.remove());
-
-    cardEl.appendChild(closeBtn);
     document.body.appendChild(cardEl);
   }
 
   cardEl.innerHTML = `<button aria-label="Close TruthLens panel" style="position:absolute;right:11px;top:8px;border:none;background:transparent;cursor:pointer;color:#8fb8ff;font-size:16px;">×</button>${html}`;
   const closeBtn = cardEl.querySelector("button");
-  if (closeBtn) {
-    closeBtn.addEventListener("click", () => {
-      if (cardEl) {
-        cardEl.remove();
-        cardEl = null;
-      }
-    });
-  }
+  closeBtn.addEventListener("click", () => {
+    if (cardEl) {
+      cardEl.remove();
+      cardEl = null;
+    }
+  });
 }
 
 function verdictColor(verdict) {
@@ -358,9 +350,18 @@ document.addEventListener("keyup", (event) => {
 
 document.addEventListener("scroll", () => {
   if (buttonEl && selectedClaim) {
-    updateSelectionUi();
+    setTimeout(updateSelectionUi, 5);
   }
-}, true);
+}, { passive: true });
+
+// Cleanup on page unload
+window.addEventListener("beforeunload", () => {
+  cleanupFloatingUi();
+  if (cardEl) {
+    cardEl.remove();
+    cardEl = null;
+  }
+});
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || !message.type) {

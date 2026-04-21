@@ -216,6 +216,8 @@ async function login() {
   }
 
   setStatus(`Logged in as ${email}.`);
+  // Clear the password field for security
+  document.getElementById("password").value = "";
 }
 
 async function register() {
@@ -301,16 +303,27 @@ async function importWebSessionToken() {
     return;
   }
 
-  await new Promise((resolve) => {
-    chrome.storage.local.set(
-      {
-        authToken: token,
-        authEmail: profile && profile.email ? profile.email : "",
-        backendUrl
-      },
-      resolve
-    );
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      chrome.storage.local.set(
+        {
+          authToken: token,
+          authEmail: profile && profile.email ? profile.email : "",
+          backendUrl
+        },
+        () => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve();
+          }
+        }
+      );
+    });
+  } catch (error) {
+    setStatus("Failed to save credentials: " + (error instanceof Error ? error.message : "Unknown error"), true);
+    return;
+  }
 
   setStatus(`Synced with web login as ${profile && profile.email ? profile.email : "user"}.`);
 }

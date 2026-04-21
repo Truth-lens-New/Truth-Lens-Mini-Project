@@ -10,13 +10,27 @@ function normalizeUrl(url) {
 
 function getStorage(keys) {
   return new Promise((resolve) => {
-    chrome.storage.local.get(keys, (result) => resolve(result));
+    chrome.storage.local.get(keys, (result) => {
+      if (chrome.runtime.lastError) {
+        console.error("Storage error:", chrome.runtime.lastError);
+        resolve({});
+        return;
+      }
+      resolve(result);
+    });
   });
 }
 
 function setStorage(values) {
-  return new Promise((resolve) => {
-    chrome.storage.local.set(values, () => resolve());
+  return new Promise((resolve, reject) => {
+    chrome.storage.local.set(values, () => {
+      if (chrome.runtime.lastError) {
+        console.error("Storage error:", chrome.runtime.lastError);
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve();
+      }
+    });
   });
 }
 
@@ -70,7 +84,11 @@ async function loginUser(email, password) {
     throw new Error("Login succeeded but no access token was returned.");
   }
 
-  await setStorage({ authToken: token, authEmail: email });
+  try {
+    await setStorage({ authToken: token, authEmail: email });
+  } catch (error) {
+    throw new Error("Failed to save login credentials: " + (error instanceof Error ? error.message : "Unknown error"));
+  }
 
   return { email, hasToken: true };
 }
@@ -277,7 +295,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         }
         case "SAVE_BACKEND_URL": {
           const backendUrl = normalizeUrl(message.backendUrl);
-          await setStorage({ backendUrl });
+          try {
+            await setStorage({ backendUrl });
+          } catch (error) {
+            throw new Error("Failed to save backend URL: " + (error instanceof Error ? error.message : "Unknown error"));
+          }
           sendResponse({ ok: true, data: { backendUrl } });
           return;
         }
@@ -298,10 +320,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           }
 
           const profile = await fetchProfileForToken(token);
-          await setStorage({
-            authToken: token,
-            authEmail: profile && profile.email ? profile.email : ""
-          });
+          try {
+            await setStorage({
+              authToken: token,
+              authEmail: profile && profile.email ? profile.email : ""
+            });
+          } catch (error) {
+            throw new Error("Failed to save token: " + (error instanceof Error ? error.message : "Unknown error"));
+          }
 
           sendResponse({
             ok: true,
@@ -313,7 +339,11 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           return;
         }
         case "LOGOUT": {
-          await setStorage({ authToken: "", authEmail: "" });
+          try {
+            await setStorage({ authToken: "", authEmail: "" });
+          } catch (error) {
+            throw new Error("Failed to logout: " + (error instanceof Error ? error.message : "Unknown error"));
+          }
           sendResponse({ ok: true, data: { hasToken: false } });
           return;
         }
