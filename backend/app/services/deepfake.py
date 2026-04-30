@@ -6,8 +6,11 @@ Uses EfficientNet-B0 model trained to detect deepfake images.
 
 import asyncio
 import functools
+import hashlib
 import io
 import base64
+import tempfile
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -372,10 +375,18 @@ class DeepfakeDetector:
         try:
             # Load image
             image = Image.open(io.BytesIO(image_bytes))
-            
+
+            # ── Fix 1: Pre-resize large images ─────────────────────────────────
+            # Caps preprocessing time for huge uploads (4K, 8K etc.).
+            # B3 transform will resize to 300×300 anyway, so we lose nothing.
+            MAX_DIM = 1024
+            if image.width > MAX_DIM or image.height > MAX_DIM:
+                image.thumbnail((MAX_DIM, MAX_DIM), Image.LANCZOS)
+            # ───────────────────────────────────────────────────────────────────
+
             # Extract metadata evidence
             meta_result = self._extract_metadata(image)
-            
+
             # Convert for model
             image_rgb = image.convert('RGB')
             input_tensor = self.transform(image_rgb).unsqueeze(0).to(self.device)
@@ -385,37 +396,41 @@ class DeepfakeDetector:
             # But usually for inference we don't need grad unless we explicitly do backward
             # So we need to switch on gradients briefly
             
-            # Run inference with gradient tracking for Grad-CAM
-            # We need to set model to eval but enable grad for input execution to capture gradients
+            heatmap_b64, heatmap_data_url = None, None
+
+            # Single forward pass with gradients retained — same as Uday's original.
+            # DO NOT wrap in torch.no_grad(): that destroys the gradient graph and
+            # forces a SECOND forward pass just for Grad-CAM (2× CPU time on B3).
             self.model.eval()
-            
-            # !!! CRITICAL: We need gradients for Grad-CAM !!!
-            # Standard inference is with torch.no_grad(), but here we NEED grad
-            # But only for the specific pass
-            
-            outputs = self.model(input_tensor)
+            self.model.zero_grad()
+            outputs = self.model(input_tensor)          # one pass, graph kept
             probabilities = torch.softmax(outputs, dim=1)
-            
-            # Get prediction
             predicted_class = torch.argmax(probabilities, dim=1).item()
             confidence = probabilities[0][predicted_class].item()
-            
             real_prob = probabilities[0][0].item()
             fake_prob = probabilities[0][1].item()
+
+            # Backward on the SAME outputs tensor — graph is still intact
+            try:
+                score = outputs[0, predicted_class]
+                score.backward()
+                heatmap_b64, heatmap_data_url = self._generate_heatmap(input_tensor, image_rgb)
+            except Exception as e:
+                print(f"⚠️ Grad-CAM heatmap generation failed: {e}")
+                # Proceed without heatmap — inference result is still valid
             
-            # Generate heatmap for the predicted class
-            # Zero grads first
-            self.model.zero_grad()
-            
-            # Backward pass for the predicted class score
-            score = outputs[0, predicted_class]
-            score.backward()
-            
-            # Generate heatmap
-            heatmap_b64, heatmap_data_url = self._generate_heatmap(input_tensor, image_rgb)
-            
-            # Determine verdict
-            verdict = "FAKE" if predicted_class == 1 else "REAL"
+            # ── Fix 2: Calibrated classification threshold ──────────────────
+            # Raw argmax flips to FAKE at 50.01% which is too hair-trigger.
+            # Require fake_prob > 55% for a FAKE call; below that → UNCERTAIN.
+            FAKE_THRESHOLD = 0.55
+            if fake_prob > FAKE_THRESHOLD:
+                verdict = "FAKE"
+            elif real_prob > FAKE_THRESHOLD:
+                verdict = "REAL"
+            else:
+                # Model is genuinely uncertain — let metadata break the tie
+                verdict = "FAKE" if metadata_risk >= 40 else "REAL"
+            # ───────────────────────────────────────────────────────────────────
             
             # ============================================
             # Integrate metadata risk score with model prediction
@@ -459,14 +474,15 @@ class DeepfakeDetector:
             if heatmap_data_url:
                 evidence.append("Analysis heatmap generated showing focus regions")
 
-            # Confidence level description (now considers metadata)
+            # Confidence level — thresholds on 0-1 scale:
+            # ≥75% = high, ≥55% = medium, <55% = low
             combined_confidence = confidence
             if metadata_risk >= 60 and verdict == "FAKE":
-                combined_confidence = min(0.99, confidence + 0.05)  # Boost confidence
-            
-            if combined_confidence >= 0.9:
+                combined_confidence = min(0.99, confidence + 0.05)
+
+            if combined_confidence >= 0.75:
                 confidence_level = "high"
-            elif combined_confidence >= 0.7:
+            elif combined_confidence >= 0.55:
                 confidence_level = "medium"
             else:
                 confidence_level = "low"
@@ -501,11 +517,144 @@ class DeepfakeDetector:
         with open(file_path, 'rb') as f:
             return self.predict(f.read())
 
+    def analyze_video(self, video_bytes: bytes, n_frames: int = 8) -> dict:
+        """
+        Analyze a video for deepfakes by sampling N evenly-spaced keyframes.
+
+        Strategy:
+        - Write video bytes to a named temp file (OpenCV needs a file path)
+        - Sample n_frames evenly across the total frame count
+        - Run EfficientNet-B3 inference on each frame
+        - Aggregate: majority verdict, averaged probabilities
+
+        Args:
+            video_bytes: Raw video file bytes
+            n_frames: Number of frames to sample (default 8)
+
+        Returns:
+            Aggregated result dict (same shape as predict())
+        """
+        # Write to temp file so OpenCV can open it
+        suffix = ".mp4"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+
+        try:
+            cap = cv2.VideoCapture(tmp_path)
+            if not cap.isOpened():
+                raise ValueError("Could not open video file — unsupported format or corrupt file.")
+
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            duration_s = total_frames / fps
+
+            if total_frames < 1:
+                raise ValueError("Video has no readable frames.")
+
+            # Pick n_frames evenly-spaced positions (skip very first/last frames)
+            sample_count = min(n_frames, total_frames)
+            frame_indices = [
+                int(total_frames * (i + 0.5) / sample_count)
+                for i in range(sample_count)
+            ]
+
+            frame_results = []
+            for idx in frame_indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ret, frame = cap.read()
+                if not ret:
+                    continue
+
+                # Convert BGR (OpenCV) → RGB → PIL → bytes → predict()
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(frame_rgb)
+                buf = io.BytesIO()
+                pil_img.save(buf, format="JPEG", quality=90)
+                frame_bytes = buf.getvalue()
+
+                try:
+                    result = self.predict(frame_bytes)
+                    frame_results.append(result)
+                except Exception as e:
+                    print(f"⚠️ Frame {idx} analysis failed: {e}")
+                    continue
+
+            cap.release()
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+        if not frame_results:
+            raise ValueError("No frames could be analyzed from the video.")
+
+        # ── Aggregate frame results ────────────────────────────────────────────
+        fake_votes = sum(1 for r in frame_results if r["verdict"] == "FAKE")
+        real_votes = len(frame_results) - fake_votes
+        verdict = "FAKE" if fake_votes > real_votes else "REAL"
+
+        avg_real = sum(r["real_probability"] for r in frame_results) / len(frame_results)
+        avg_fake = sum(r["fake_probability"] for r in frame_results) / len(frame_results)
+        avg_conf = sum(r["confidence"] for r in frame_results) / len(frame_results)
+        avg_meta_risk = sum(r.get("metadata_risk_score", 0) for r in frame_results) / len(frame_results)
+
+        # Confidence level — thresholds on 0-100 scale (avg_conf is already ×100):
+        # ≥75 = high, ≥55 = medium, <55 = low
+        if avg_conf >= 75:
+            confidence_level = "high"
+        elif avg_conf >= 55:
+            confidence_level = "medium"
+        else:
+            confidence_level = "low"
+
+        # Use heatmap from the most confident frame (first FAKE frame, or first frame)
+        best_frame = next((r for r in frame_results if r["verdict"] == verdict), frame_results[0])
+        heatmap = best_frame.get("heatmap")
+
+        # Collect unique evidence from all frames (deduplicated)
+        seen = set()
+        all_evidence = []
+        for r in frame_results:
+            for e in r.get("evidence", []):
+                if e not in seen:
+                    seen.add(e)
+                    all_evidence.append(e)
+
+        # Prepend video-level summary
+        all_evidence.insert(0,
+            f"Video analyzed: {sample_count} frames sampled over {duration_s:.1f}s "
+            f"| {fake_votes}/{len(frame_results)} frames classified as FAKE"
+        )
+
+        return {
+            "verdict": verdict,
+            "confidence": round(avg_conf, 2),
+            "confidence_level": confidence_level,
+            "real_probability": round(avg_real, 2),
+            "fake_probability": round(avg_fake, 2),
+            "model": "EfficientNet-B3 (video)",
+            "metadata": {"format": "video", "frames_sampled": sample_count, "duration_s": round(duration_s, 1)},
+            "metadata_risk_score": round(avg_meta_risk),
+            "evidence": all_evidence[:10],
+            "heatmap": heatmap
+        }
+        # ─────────────────────────────────────────────────────────────────────
+
+
 
 # Global detector instance (lazy loaded)
 _detector: Optional[DeepfakeDetector] = None
 # Cached error string if model init fails — prevents confusing silent retry loops
 _init_error: Optional[str] = None
+
+# ── Fix 3: MD5-based result cache ──────────────────────────────────────────
+# Maps sha256(image_bytes) → prediction dict.  Gives instant responses for
+# repeat uploads without re-running the model.
+_result_cache: dict = {}
+_CACHE_MAX_SIZE = 128   # evict oldest when cache exceeds this
+# ───────────────────────────────────────────────────────────────────────────
 
 
 def get_deepfake_detector() -> DeepfakeDetector:
@@ -538,9 +687,10 @@ async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "im
     """
     Async wrapper for deepfake detection.
 
-    PyTorch inference (forward + Grad-CAM backward) is CPU-bound and can
-    take several seconds. Running it directly inside an async function blocks
-    FastAPI's event loop. We offload to the default ThreadPoolExecutor instead.
+    Includes:
+    - MD5 result cache: identical images return instantly
+    - 30s hard timeout: prevents indefinite hangs on the event loop
+    - Thread pool offload: keeps FastAPI responsive during heavy inference
 
     Args:
         image_bytes: Raw image bytes
@@ -549,10 +699,71 @@ async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "im
     Returns:
         Detection result dictionary
     """
+    global _result_cache
+
+    # ── Video routing ────────────────────────────────────────────────────────
+    # Videos cannot be opened by PIL. Extract frames first, then aggregate.
+    VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm", "video/avi", "video/x-msvideo"}
+    if content_type in VIDEO_TYPES:
+        img_hash = hashlib.md5(image_bytes).hexdigest()
+        if img_hash in _result_cache:
+            print(f"🎯 Cache hit for video {img_hash[:8]}… — skipping inference")
+            cached = dict(_result_cache[img_hash])
+            cached["cache_hit"] = True
+            return cached
+
+        detector = get_deepfake_detector()
+        loop = asyncio.get_event_loop()
+        try:
+            result = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None, functools.partial(detector.analyze_video, image_bytes)
+                ),
+                timeout=120.0  # videos need more time — allow 2 minutes
+            )
+        except asyncio.TimeoutError:
+            raise ValueError(
+                "Video analysis timed out after 120 seconds. "
+                "Try a shorter clip (under 30 seconds)."
+            )
+        # Store in cache
+        if len(_result_cache) >= _CACHE_MAX_SIZE:
+            del _result_cache[next(iter(_result_cache))]
+        _result_cache[img_hash] = result
+        return result
+    # ────────────────────────────────────────────────────────────────────────
+
+    # ── Cache check (images) ─────────────────────────────────────────────────
+    img_hash = hashlib.md5(image_bytes).hexdigest()
+    if img_hash in _result_cache:
+        print(f"🎯 Cache hit for image {img_hash[:8]}… — skipping inference")
+        cached = dict(_result_cache[img_hash])  # shallow copy
+        cached["cache_hit"] = True
+        return cached
+    # ────────────────────────────────────────────────────────────────────────
+
     detector = get_deepfake_detector()
     loop = asyncio.get_event_loop()
 
-    # Offload CPU-intensive ML inference to a thread pool
-    return await loop.run_in_executor(
-        None, functools.partial(detector.predict, image_bytes)
-    )
+    # ── Fix 4: 30s hard timeout — never hang forever ─────────────────────
+    try:
+        result = await asyncio.wait_for(
+            loop.run_in_executor(
+                None, functools.partial(detector.predict, image_bytes)
+            ),
+            timeout=30.0
+        )
+    except asyncio.TimeoutError:
+        raise ValueError(
+            "Media analysis timed out after 30 seconds. "
+            "Try a smaller image or re-upload."
+        )
+    # ────────────────────────────────────────────────────────────────────────
+
+    # Store in cache (evict oldest entry if full)
+    if len(_result_cache) >= _CACHE_MAX_SIZE:
+        oldest_key = next(iter(_result_cache))
+        del _result_cache[oldest_key]
+    _result_cache[img_hash] = result
+
+    return result

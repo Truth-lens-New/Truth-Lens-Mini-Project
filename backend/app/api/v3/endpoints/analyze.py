@@ -10,7 +10,30 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-from app.models.domain import InputType, ClaimType
+from enum import Enum
+
+class InputType(str, Enum):
+    """Types of input the system can process."""
+    TEXT = "text"
+    URL = "url"
+    IMAGE = "image"
+    SOCIAL = "social"
+
+class ClaimType(str, Enum):
+    """Classification types for claims."""
+    SCIENTIFIC_MEDICAL = "scientific_medical"
+    POLITICAL_ALLEGATION = "political_allegation"
+    FACTUAL_STATEMENT = "factual_statement"
+    BREAKING_EVENT = "breaking_event"
+    QUOTE_ATTRIBUTION = "quote_attribution"
+    VISUAL_MANIPULATION = "visual_manipulation"
+    OPINION = "opinion"
+    PREDICTION = "prediction"
+    QUESTION = "question"
+    COMMAND = "command"
+    HYPOTHETICAL = "hypothetical"
+    UNKNOWN = "unknown"
+
 from app.services.input import InputGateway
 # Concurrency Fix
 from fastapi.concurrency import run_in_threadpool
@@ -434,6 +457,8 @@ async def investigate_content(
                         verdict=result.verdict.value,
                         confidence=conf_label, # DB expects string
                         explanation=result.evidence_summary,
+                        claim_type=result.claim_type,
+                        extra_metadata=result.strategy_stats, # Store strategy stats (heatmap, etc.)
                         pipeline_version="3.0.0",
                         created_at=datetime.utcnow()
                     )
@@ -469,4 +494,6 @@ async def investigate_content(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Investigation failed: {str(e)}")

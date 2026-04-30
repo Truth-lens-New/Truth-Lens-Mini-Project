@@ -53,12 +53,14 @@ export interface AnalyzeResponse {
 export interface HistoryItem {
     id: number;
     claim: string;
-    input_text?: string;
-    input_url?: string;
     verdict: string;
     confidence: string;
-    explanation?: string;
+    explanation: string;
     created_at: string;
+    claim_type?: string;
+    metadata?: Record<string, any>;
+    input_text?: string;
+    input_url?: string;
 }
 
 // Helper for authorized fetch

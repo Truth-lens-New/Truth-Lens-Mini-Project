@@ -31,6 +31,8 @@ class ClaimType(str, Enum):
     FACTUAL_STATEMENT = "factual_statement"
     BREAKING_EVENT = "breaking_event"
     QUOTE_ATTRIBUTION = "quote_attribution"
+    # KEY: Added for V3 Visual Strategy
+    VISUAL_MANIPULATION = "visual_manipulation"
     
     # Non-checkable claim types
     OPINION = "opinion"              # Subjective value judgments
@@ -62,6 +64,7 @@ class ProcessedInput:
     source_type: InputType
     source_url: Optional[str] = None
     source_domain: Optional[str] = None
+    raw_data: Optional[bytes] = None
     extracted_at: datetime = field(default_factory=datetime.now)
     
     def __post_init__(self):
@@ -81,6 +84,7 @@ class RawClaim:
     char_end: int
     is_assertion: bool = True
     canonical_id: Optional[str] = None
+    raw_data: Optional[bytes] = None
 
 
 @dataclass
@@ -97,6 +101,7 @@ class TypedClaim:
     status: str
     sentence_index: int = 0
     canonical_id: Optional[str] = None
+    raw_data: Optional[bytes] = None
     
     def to_dict(self) -> dict:
         """Convert to dictionary for API response."""
@@ -104,8 +109,6 @@ class TypedClaim:
             "original_text": self.text,
             "claim_type": self.claim_type.value,
             "type_confidence": round(self.type_confidence, 3),
-            "is_checkable": self.is_checkable,
-            "evidence_strategy": self.evidence_strategy,
             "is_checkable": self.is_checkable,
             "evidence_strategy": self.evidence_strategy,
             "status": self.status
@@ -132,6 +135,7 @@ EVIDENCE_STRATEGIES = {
     ClaimType.FACTUAL_STATEMENT: "Wikidata verification, authoritative sources",
     ClaimType.BREAKING_EVENT: "Multi-source news check, timeline analysis",
     ClaimType.QUOTE_ATTRIBUTION: "Quote source verification",
+    ClaimType.VISUAL_MANIPULATION: "Visual forensics & deepfake detection pipeline",
     
     # Non-checkable types - explain why
     ClaimType.OPINION: "Not fact-checkable (subjective value judgment)",
@@ -148,5 +152,6 @@ CHECKABLE_TYPES = {
     ClaimType.POLITICAL_ALLEGATION,
     ClaimType.FACTUAL_STATEMENT,
     ClaimType.BREAKING_EVENT,
-    ClaimType.QUOTE_ATTRIBUTION
+    ClaimType.QUOTE_ATTRIBUTION,
+    ClaimType.VISUAL_MANIPULATION
 }

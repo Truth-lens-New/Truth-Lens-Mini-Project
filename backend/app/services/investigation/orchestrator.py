@@ -4,7 +4,24 @@ import asyncio
 import logging
 from datetime import datetime
 
-from app.models.domain import TypedClaim, ClaimType
+from enum import Enum
+
+class ClaimType(str, Enum):
+    """Classification types for claims."""
+    SCIENTIFIC_MEDICAL = "scientific_medical"
+    POLITICAL_ALLEGATION = "political_allegation"
+    FACTUAL_STATEMENT = "factual_statement"
+    BREAKING_EVENT = "breaking_event"
+    QUOTE_ATTRIBUTION = "quote_attribution"
+    VISUAL_MANIPULATION = "visual_manipulation"
+    OPINION = "opinion"
+    PREDICTION = "prediction"
+    QUESTION = "question"
+    COMMAND = "command"
+    HYPOTHETICAL = "hypothetical"
+    UNKNOWN = "unknown"
+
+from app.models.domain import TypedClaim
 from app.models.evidence import EvidenceCollection, EvidenceType, EvidenceItem, Verdict, Stance
 from app.services.evidence.known_misinfo_checker import KnownMisinfoChecker
 from app.services.evidence.wikidata_verifier import WikidataVerifier
@@ -149,10 +166,7 @@ class InvestigationOrchestrator:
             
             # 4. Merge Results
             evidence.items.extend(investigation_result.evidence.items)
-            evidence.sources_checked += len(investigation_result.evidence.items) # Count items as sources roughly, or use strategy stats if available
-            # Better: use the sources_checked from inner evidence if tracked, but strategies might just return items
-            # strategies usually return InvestigationResult which has 'evidence' (EvidenceCollection)
-            # So we should sum it up.
+            # Use the strategy's own sources_checked count (authoritative)
             evidence.sources_checked += investigation_result.evidence.sources_checked
             
             # Propagate Strategy Decision
@@ -172,7 +186,7 @@ class InvestigationOrchestrator:
             
         except Exception as e:
             logger.error(f"Strategy execution failed: {e}", exc_info=True)
-            # We don't crash, we return partial evidence
+            evidence.stop_reason = f"strategy_error: {type(e).__name__}: {e}"
             
         self._finalize(evidence, start_time)
         return evidence

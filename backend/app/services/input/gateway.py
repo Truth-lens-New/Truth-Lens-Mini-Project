@@ -4,7 +4,16 @@ TruthLens Input Gateway
 Routes different input types to appropriate handlers.
 """
 
-from app.models.domain import InputType, ProcessedInput
+from enum import Enum
+
+class InputType(str, Enum):
+    """Types of input the system can process."""
+    TEXT = "text"
+    URL = "url"
+    IMAGE = "image"
+    SOCIAL = "social"
+
+from app.models.domain import ProcessedInput
 from .text_handler import TextHandler
 from .url_scraper import URLScraper
 from .ocr_engine import OCREngine

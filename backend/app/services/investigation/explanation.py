@@ -160,7 +160,31 @@ class ExplanationService:
             - Keep it under 80 words.
             """
 
-        # === 4. General Fallback ===
+        # === 4. Visual Manipulation Strategy ===
+        elif claim.claim_type == ClaimType.VISUAL_MANIPULATION.value:
+            model = stats.get('model', 'EfficientNet-B3')
+            real_prob = stats.get('probabilities', {}).get('real', 0)
+            fake_prob = stats.get('probabilities', {}).get('fake', 0)
+            
+            return f"""
+            Role: Lead Digital Forensic Analyst.
+            Task: Synthesize the technical evidence for this visual content into a professional forensic summary.
+            
+            Content: "{claim.original_text}"
+            Verdict: {claim.verdict.value}
+            Model: {model} (Real: {real_prob}%, Fake: {fake_prob}%)
+            
+            Technical Evidence:
+            {base_evidence}
+            
+            Directives:
+            - Explain *why* the technical hits are significant (e.g., "The absence of camera metadata combined with GAN-specific noise patterns suggests...").
+            - Be authoritative and precise. Use terms like "compression artifacts", "biometric inconsistencies", or "source provenance" where appropriate.
+            - If REAL, explain why the image lacks common AI indicators.
+            - Keep it professional, objective, and under 120 words.
+            """
+
+        # === 5. General Fallback ===
         else:
             return f"""
             Role: Fact-Checker.
@@ -179,9 +203,12 @@ class ExplanationService:
             - Keep it under 100 words.
             """
 
-    async def explain_media(self, image_bytes: bytes, verdict: str, confidence: float) -> str:
+    async def explain_media(self, image_bytes: bytes, verdict: str, confidence: float, 
+                             metadata: Optional[Dict[str, Any]] = None, 
+                             evidence_points: Optional[List[str]] = None) -> str:
         """
-        Generate a visual explanation for media analysis using Gemini Vision.
+        Generate a deep visual forensic explanation.
+        Synthesizes technical evidence and visual patterns using Gemini Vision.
         """
         if not self.client or self.provider != "gemini":
             return "Visual explanation unavailable (Gemini Vision required)."
@@ -191,32 +218,36 @@ class ExplanationService:
             import io
             image = PIL.Image.open(io.BytesIO(image_bytes))
             
+            meta_str = ", ".join([f"{k}: {v}" for k, v in (metadata or {}).items()])
+            evidence_str = "\n".join([f"- {p}" for p in (evidence_points or [])])
+            
             prompt = f"""
-            Role: Digital Forensic Analyst.
-            Task: Analyze this image and explain the verdict: {verdict} (Confidence: {confidence}%).
+            Role: Senior Digital Forensic Specialist.
+            Task: Provide a detailed forensic narrative for this image analysis.
             
-            If Verdict is FAKE:
-            Look for visual artifacts, inconsistent lighting, warped backgrounds, unnatural skin textures, or mismatched reflections.
+            Verdict: {verdict}
+            Model Confidence: {confidence}%
+            Technical Metadata: {meta_str}
+            AI Indicators Found:
+            {evidence_str}
             
-            If Verdict is REAL:
-            Highlight the consistency of lighting, natural noise patterns, and lack of digital artifacts.
+            Instructions:
+            1. Analyze the image visually for matching artifacts (e.g., if technical hits say 'warped edges', find them).
+            2. Synthesize WHY this makes the image {verdict}.
+            3. Address the 'Forensic Narrative' requested by the investigator.
+            4. If REAL: Explain the lack of AI signatures and consistent structural integrity.
+            5. If FAKE: Explain specifically what gives it away (e.g., "The spectral anomalies in the high-frequency regions...").
             
-            Keep the explanation under 80 words. Be technical but accessible.
+            Style: Professional, analytical, "insider" forensic tone. Under 100 words.
             """
             
-            # Gemini Pro Vision call (model name might differ slightly, using auto-selection if possible or 'gemini-1.5-flash')
-            # Assuming self.client is configured. For Vision we usually need 'gemini-pro-vision'.
-            # However, 'gemini-1.5-flash' handles everything.
-            
-            # Re-initialize specific model for vision if needed, or stick to current if it's 1.5-flash.
-            # Safety check: simplistic approach
             model = genai.GenerativeModel('gemini-1.5-flash') 
             response = await model.generate_content_async([prompt, image])
             return self._clean_output(response.text)
             
         except Exception as e:
             print(f"Vision Explanation Failed: {e}")
-            return "Could not generate visual explanation due to API limitations."
+            return "Could not generate visual explanation. " + " ".join(evidence_points or [])
 
     def _format_evidence(self, items: List[EvidenceItem]) -> str:
         """Format top 5 evidence items for the prompt."""

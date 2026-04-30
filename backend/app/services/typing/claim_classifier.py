@@ -6,8 +6,25 @@ This is THE FORK - routes claims to different evidence strategies.
 """
 
 from typing import List
+from enum import Enum
+
+class ClaimType(str, Enum):
+    """Classification types for claims."""
+    SCIENTIFIC_MEDICAL = "scientific_medical"
+    POLITICAL_ALLEGATION = "political_allegation"
+    FACTUAL_STATEMENT = "factual_statement"
+    BREAKING_EVENT = "breaking_event"
+    QUOTE_ATTRIBUTION = "quote_attribution"
+    VISUAL_MANIPULATION = "visual_manipulation"
+    OPINION = "opinion"
+    PREDICTION = "prediction"
+    QUESTION = "question"
+    COMMAND = "command"
+    HYPOTHETICAL = "hypothetical"
+    UNKNOWN = "unknown"
+
 from app.models.domain import (
-    RawClaim, TypedClaim, ClaimType, 
+    RawClaim, TypedClaim, 
     EVIDENCE_STRATEGIES, CHECKABLE_TYPES
 )
 from app.services.models import get_model_manager
@@ -126,7 +143,8 @@ class ClaimClassifier:
             evidence_strategy=strategy,
             status="Pending evidence analysis",
             sentence_index=claim.sentence_index,
-            canonical_id=claim.canonical_id
+            canonical_id=claim.canonical_id,
+            raw_data=claim.raw_data
         )
 
     def _classify_single(self, claim: RawClaim) -> TypedClaim:
@@ -156,6 +174,11 @@ class ClaimClassifier:
         # 5. Opinions (subjective judgments)
         if self._is_likely_opinion(text_lower):
             return self._create_non_checkable(claim, ClaimType.OPINION)
+
+        # 5b. Visual Manipulation (Presence of raw data)
+        # If the claim carries raw image data, it's a visual manipulation check
+        if claim.raw_data:
+             return self._create_checkable_boost(claim, ClaimType.VISUAL_MANIPULATION)
 
         # === HYBRID BOOSTING (Keywords override Zero-Shot) ===
         # 6. Scientific/Medical (Strong Keywords)
@@ -206,7 +229,8 @@ class ClaimClassifier:
             evidence_strategy=strategy,
             status=status,
             sentence_index=claim.sentence_index,
-            canonical_id=claim.canonical_id
+            canonical_id=claim.canonical_id,
+            raw_data=claim.raw_data
         )
     
     def _create_non_checkable(self, claim: RawClaim, claim_type: ClaimType) -> TypedClaim:
@@ -219,7 +243,8 @@ class ClaimClassifier:
             evidence_strategy=EVIDENCE_STRATEGIES.get(claim_type, "Not fact-checkable"),
             status=EVIDENCE_STRATEGIES.get(claim_type, "Not fact-checkable"),
             sentence_index=claim.sentence_index,
-            canonical_id=claim.canonical_id
+            canonical_id=claim.canonical_id,
+            raw_data=claim.raw_data
         )
     
     def _is_likely_opinion(self, text: str) -> bool:

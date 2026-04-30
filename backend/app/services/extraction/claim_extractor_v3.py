@@ -6,6 +6,15 @@ Over-extraction strategy: Better to have false positives than miss claims.
 """
 
 from typing import List
+from enum import Enum
+
+class InputType(str, Enum):
+    """Types of input the system can process."""
+    TEXT = "text"
+    URL = "url"
+    IMAGE = "image"
+    SOCIAL = "social"
+
 from app.models.domain import ProcessedInput, RawClaim
 from app.services.models import get_model_manager
 
@@ -41,17 +50,25 @@ class ClaimExtractorV3:
     def extract(self, processed_input: ProcessedInput) -> List[RawClaim]:
         """
         Extract claims from processed input.
-        
-        Args:
-            processed_input: Output from InputGateway
-            
-        Returns:
-            List of RawClaim objects
         """
         # Parse with spaCy
         doc = self.models.nlp(processed_input.text)
         
         claims = []
+        
+        # Phase 4: Handle Visual Content (even if OCR text is generic)
+        if processed_input.source_type == InputType.IMAGE:
+             # Generate a primary visual claim
+             claims.append(RawClaim(
+                 text=processed_input.text,
+                 sentence_index=0,
+                 char_start=0,
+                 char_end=len(processed_input.text),
+                 is_assertion=True,
+                 raw_data=processed_input.raw_data
+             ))
+
+        # Standard text extraction
         for idx, sent in enumerate(doc.sents):
             sent_text = sent.text.strip()
             
@@ -59,8 +76,7 @@ class ClaimExtractorV3:
             if not sent_text:
                 continue
 
-            # Attempt to split compound sentences (e.g., "Main claim, extra info" or "Claim 1, Claim 2")
-            # This handles the user case: "covid vaccines cause autism, weather is nice today"
+            # Attempt to split compound sentences
             sub_sentences = self._split_compound_sentence(sent)
             
             for sub_idx, sub_text in enumerate(sub_sentences):
@@ -72,13 +88,14 @@ class ClaimExtractorV3:
                 is_assertion = self._is_assertion(sub_sent)
                 might_be_claim = self._might_be_claim(sub_sent)
                 
-                if is_assertion or might_be_claim:
+                if (is_assertion or might_be_claim) and sub_text not in [c.text for c in claims]:
                     claim = RawClaim(
                         text=sub_text,
-                        sentence_index=idx * 100 + sub_idx, # Unique index
-                        char_start=sent.start_char, # Approximate
-                        char_end=sent.end_char,     # Approximate
-                        is_assertion=is_assertion
+                        sentence_index=(idx + 1) * 100 + sub_idx, # Unique index
+                        char_start=sent.start_char,
+                        char_end=sent.end_char,
+                        is_assertion=is_assertion,
+                        raw_data=processed_input.raw_data # Carry data to all potential claims
                     )
                     claims.append(claim)
         

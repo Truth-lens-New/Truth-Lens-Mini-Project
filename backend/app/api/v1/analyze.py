@@ -243,6 +243,7 @@ async def analyze_claim(
         verdict=verdict_result['verdict'],
         confidence=verdict_result['confidence'],
         explanation=explanation,
+        claim_type="GENERAL",
         pipeline_version=settings.pipeline_version
     )
     
@@ -346,12 +347,23 @@ async def analyze_media(
         try:
             check = Check(
                 user_id=current_user["user_id"],
-                input_text=f"Media Analysis: {file.filename}",
+                input_text=None,                             # not text input — file upload
+                input_url=None,
                 claim=f"Deepfake Analysis: {file.filename}",
                 verdict=result["verdict"],
                 confidence=result["confidence_level"],
                 explanation="\n".join(result.get("evidence", []))[:4000] if result.get("evidence") else "No evidence provided",
-                stance_summary=result, # Storing full result JSON including heatmap
+                claim_type="VISUAL_MANIPULATION",            # routes to Media tab in history
+                extra_metadata={                             # full result for rich history UI
+                    "heatmap": result.get("heatmap"),
+                    "model": result.get("model"),
+                    "real_probability": result.get("real_probability"),
+                    "fake_probability": result.get("fake_probability"),
+                    "metadata_risk_score": result.get("metadata_risk_score"),
+                    "image_metadata": result.get("metadata", {}),
+                    "filename": file.filename,
+                    "content_type": file.content_type,
+                },
                 pipeline_version="deepfake-v1"
             )
             db.add(check)

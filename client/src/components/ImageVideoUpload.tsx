@@ -68,21 +68,20 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
     setCurrentStep('preprocessing');
 
     try {
-      // Show preprocessing step
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise(resolve => setTimeout(resolve, 400));
       setCurrentStep('deepfake');
 
-      // Call the real API
+      // Send raw file via multipart/form-data to /api/v1/analyze-media
+      // (EfficientNet-B3 deepfake detector — NOT the V3 text pipeline)
       const result = await analyzeMedia(file);
 
-      // Show remaining steps for UX
       await new Promise(resolve => setTimeout(resolve, 300));
       setCurrentStep('forensic');
       await new Promise(resolve => setTimeout(resolve, 300));
       setCurrentStep('heatmap');
       await new Promise(resolve => setTimeout(resolve, 300));
       setCurrentStep('verdict');
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       setAnalysisResult(result);
       setShowResults(true);

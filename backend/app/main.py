@@ -13,6 +13,7 @@ from app.core.database import init_db
 from app.api.auth.auth import router as auth_router
 from app.api.v1.analyze import router as analyze_router
 from app.api.v1.history import router as history_router
+from app.api.v1.whatsapp import router as whatsapp_router
 from app.api.v3.router import router as v3_router  # V3 Phase 1
 
 
@@ -22,9 +23,19 @@ async def lifespan(app: FastAPI):
     # Startup: Initialize database
     await init_db()
     print("Database initialized")
-    
+
+    # Warm up deepfake model so the first media upload isn't slow
+    try:
+        import asyncio
+        from app.services.deepfake import get_deepfake_detector
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, get_deepfake_detector)
+        print("✅ Deepfake model warmed up and ready")
+    except Exception as e:
+        print(f"⚠️  Deepfake model warm-up failed (non-fatal): {e}")
+
     yield
-    
+
     # Shutdown: Cleanup if needed
     print("Application shutting down")
 
@@ -50,6 +61,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(analyze_router)
 app.include_router(history_router)
+app.include_router(whatsapp_router)
 app.include_router(v3_router)  # V3 Phase 1 routes
 
 

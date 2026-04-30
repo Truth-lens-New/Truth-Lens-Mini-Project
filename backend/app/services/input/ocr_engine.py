@@ -73,12 +73,10 @@ class OCREngine:
             
             print(f"OCR Extracted: {combined_text}") # Debug log
             
-            if not combined_text.strip():
-                raise ValueError("No text found in image")
-            
             return ProcessedInput(
-                text=combined_text,
-                source_type=InputType.IMAGE
+                text=combined_text or f"Visual Content Analysis (Size: {len(image_bytes)/1024:.1f}KB)",
+                source_type=InputType.IMAGE,
+                raw_data=image_bytes
             )
         finally:
             # Cleanup temp file

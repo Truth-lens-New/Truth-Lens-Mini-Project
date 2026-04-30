@@ -28,6 +28,8 @@ class HistoryItemResponse(BaseModel):
     verdict: str
     confidence: str
     explanation: Optional[str]
+    claim_type: Optional[str]
+    metadata: Optional[dict]
     created_at: datetime
     
     class Config:
@@ -47,6 +49,8 @@ class HistoryDetailResponse(BaseModel):
     factcheck_rating: Optional[str]
     factcheck_summary: Optional[str]
     stance_summary: Optional[dict]
+    claim_type: Optional[str]
+    metadata: Optional[dict]
     created_at: datetime
     
     class Config:
@@ -105,6 +109,8 @@ async def get_history(
                 verdict=item.verdict,
                 confidence=item.confidence,
                 explanation=item.explanation,
+                claim_type=item.claim_type,
+                metadata=item.extra_metadata,
                 created_at=item.created_at
             )
             for item in items
@@ -154,6 +160,8 @@ async def get_history_item(
         factcheck_rating=item.factcheck_rating,
         factcheck_summary=item.factcheck_summary,
         stance_summary=item.stance_summary,
+        claim_type=item.claim_type,
+        extra_metadata=item.extra_metadata,
         created_at=item.created_at
     )
 

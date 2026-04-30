@@ -6,6 +6,7 @@ from app.services.investigation.strategies.scientific import ScientificStrategy
 from app.services.investigation.strategies.political import PoliticalStrategy
 from app.services.investigation.strategies.breaking import BreakingNewsStrategy
 from app.services.investigation.strategies.generic import GenericStrategy
+from app.services.investigation.strategies.visual import VisualForensicsStrategy
 
 class StrategyFactory:
     """
@@ -35,3 +36,4 @@ class StrategyFactory:
 StrategyFactory.register(ClaimType.SCIENTIFIC_MEDICAL, ScientificStrategy)
 StrategyFactory.register(ClaimType.POLITICAL_ALLEGATION, PoliticalStrategy)
 StrategyFactory.register(ClaimType.BREAKING_EVENT, BreakingNewsStrategy)
+StrategyFactory.register(ClaimType.VISUAL_MANIPULATION, VisualForensicsStrategy)

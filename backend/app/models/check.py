@@ -34,12 +34,18 @@ class Check(Base):
     # Stance analysis
     stance_summary = Column(JSON, nullable=True)  # {"supports": 2, "refutes": 1, ...}
     
+    # Strategy-specific metadata (e.g., heatmaps, probability breakdowns)
+    extra_metadata = Column("metadata", JSON, nullable=True)
+    
     # Final verdict
     verdict = Column(String(100), nullable=False)  # Likely True, Likely False, etc.
     confidence = Column(String(20), nullable=False)  # high, medium, low
     
     # Explanation
     explanation = Column(Text, nullable=True)
+    
+    # Claim type (for categorization)
+    claim_type = Column(String(50), nullable=True, default="GENERAL")
     
     # Pipeline version
     pipeline_version = Column(String(20), nullable=True, default="0.1.0")
