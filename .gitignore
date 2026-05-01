@@ -67,3 +67,18 @@ htmlcov/
 
 # TypeScript
 *.tsbuildinfo
+
+# Flutter / Dart
+mobile/.dart_tool/
+mobile/.flutter-plugins
+mobile/.flutter-plugins-dependencies
+mobile/.packages
+mobile/build/
+mobile/android/.gradle/
+mobile/android/local.properties
+mobile/android/key.properties
+mobile/android/app/google-services.json
+mobile/ios/
+mobile/.idea/
+mobile/*.iml
+mobile/pubspec.lock
