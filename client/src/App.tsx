@@ -13,6 +13,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { Navigation } from './components/Navigation';
 import { ComingSoonOverlay } from './components/ComingSoonOverlay';
 import { InvestigationPage } from './components/InvestigationPage';
+import { ChatBot } from './components/ui/ChatBot';
 import { isAuthenticated, logout } from './lib/api';
 import { ThemeProvider } from 'next-themes';
 
@@ -134,6 +135,9 @@ function AppContent() {
           <Route path="/settings" element={<SettingsPage onNavigate={handleNavigate} />} />
         </Routes>
       </div>
+
+      {/* Global Support Bot Component */}
+      <ChatBot />
     </div>
   );
 }

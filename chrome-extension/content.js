@@ -4,20 +4,56 @@ let selectedClaim = "";
 let buttonEl = null;
 let cardEl = null;
 
+// Kill-switch: abort removes ALL our event listeners when the extension is reloaded
+const _ctl = new AbortController();
+const _signal = _ctl.signal;
+
+function destroyContentScript() {
+  _ctl.abort();
+  cleanupFloatingUi();
+  if (cardEl) { try { cardEl.remove(); } catch (e) { } cardEl = null; }
+}
+
+function isExtensionContextValid() {
+  try {
+    return Boolean(chrome.runtime && chrome.runtime.id);
+  } catch {
+    return false;
+  }
+}
+
 function sendRuntimeMessage(payload) {
   return new Promise((resolve) => {
+    if (!isExtensionContextValid()) {
+      destroyContentScript();
+      resolve({ ok: false, error: "Extension was reloaded — refresh this page to re-activate TruthLens." });
+      return;
+    }
+
     const timeout = setTimeout(() => {
-      resolve({ ok: false, error: "Extension did not respond in time. Please reload the page." });
+      resolve({ ok: false, error: "Extension did not respond. Please reload the page." });
     }, 30000);
 
-    chrome.runtime.sendMessage(payload, (response) => {
+    try {
+      chrome.runtime.sendMessage(payload, (response) => {
+        clearTimeout(timeout);
+        if (chrome.runtime.lastError) {
+          const msg = chrome.runtime.lastError.message || "";
+          if (msg.includes("context invalidated") || msg.includes("Extension context")) {
+            destroyContentScript();
+          }
+          resolve({ ok: false, error: msg });
+          return;
+        }
+        resolve(response || { ok: false, error: "No response from extension." });
+      });
+    } catch (err) {
       clearTimeout(timeout);
-      if (chrome.runtime.lastError) {
-        resolve({ ok: false, error: chrome.runtime.lastError.message });
-        return;
+      if (err && err.message && err.message.includes("context invalidated")) {
+        destroyContentScript();
       }
-      resolve(response || { ok: false, error: "No response from extension." });
-    });
+      resolve({ ok: false, error: err && err.message ? err.message : "Extension context lost." });
+    }
   });
 }
 
@@ -47,10 +83,12 @@ function renderResultCard(html) {
     cardEl.style.padding = "12px";
     cardEl.style.borderRadius = "14px";
     cardEl.style.border = "1px solid rgba(96, 130, 180, 0.34)";
-    cardEl.style.background = "linear-gradient(165deg, rgba(8,18,36,0.96), rgba(4,9,20,0.95))";
+    cardEl.style.background =
+      "linear-gradient(165deg, rgba(8,18,36,0.96), rgba(4,9,20,0.95))";
     cardEl.style.backdropFilter = "blur(8px)";
-    cardEl.style.boxShadow = "0 24px 46px rgba(3,8,18,0.66), 0 0 24px rgba(47,124,255,0.2)";
-    cardEl.style.fontFamily = "\"Sora\", \"Space Grotesk\", sans-serif";
+    cardEl.style.boxShadow =
+      "0 24px 46px rgba(3,8,18,0.66), 0 0 24px rgba(47,124,255,0.2)";
+    cardEl.style.fontFamily = '"Sora", "Space Grotesk", sans-serif';
     cardEl.style.color = "#e8f1ff";
     document.body.appendChild(cardEl);
   }
@@ -70,7 +108,11 @@ function verdictColor(verdict) {
   if (value.includes("true") || value.includes("supports")) {
     return "#0b8f4d";
   }
-  if (value.includes("false") || value.includes("refute") || value.includes("misleading")) {
+  if (
+    value.includes("false") ||
+    value.includes("refute") ||
+    value.includes("misleading")
+  ) {
     return "#d14343";
   }
   if (value.includes("mixed") || value.includes("uncertain")) {
@@ -101,8 +143,8 @@ function normalizedClaims(result) {
       confidence: Number(result.confidence) || 0,
       evidenceSummary: result.evidenceSummary || "No summary available.",
       evidenceCount: result.evidenceCount || 0,
-      sourcesChecked: result.sourcesChecked || 0
-    }
+      sourcesChecked: result.sourcesChecked || 0,
+    },
   ];
 }
 
@@ -124,7 +166,8 @@ function getRankedSources(claim) {
 
   evidence.forEach((item) => {
     const sourceUrl = item && item.sourceUrl ? String(item.sourceUrl) : "";
-    const sourceDomain = item && item.sourceDomain ? String(item.sourceDomain) : "unknown";
+    const sourceDomain =
+      item && item.sourceDomain ? String(item.sourceDomain) : "unknown";
     const key = sourceUrl || sourceDomain;
     if (!key || seen.has(key)) {
       return;
@@ -136,8 +179,9 @@ function getRankedSources(claim) {
       sourceType: item && item.sourceType ? item.sourceType : "web_search",
       stance: item && item.stance ? item.stance : "neutral",
       trustScore: item && item.trustScore ? Number(item.trustScore) : 0,
-      stanceConfidence: item && item.stanceConfidence ? Number(item.stanceConfidence) : 0,
-      textPreview: item && item.textPreview ? item.textPreview : ""
+      stanceConfidence:
+        item && item.stanceConfidence ? Number(item.stanceConfidence) : 0,
+      textPreview: item && item.textPreview ? item.textPreview : "",
     });
   });
 
@@ -151,7 +195,9 @@ function getRankedSources(claim) {
 
 function renderSourceRow(source) {
   const domain = escapeHtml(source.sourceDomain || "unknown");
-  const sourceType = escapeHtml(String(source.sourceType || "web_search").replace(/_/g, " "));
+  const sourceType = escapeHtml(
+    String(source.sourceType || "web_search").replace(/_/g, " "),
+  );
   const stance = escapeHtml(String(source.stance || "neutral").toUpperCase());
   const stanceColor = stanceBadgeColor(source.stance);
   const preview = escapeHtml((source.textPreview || "").slice(0, 120));
@@ -223,10 +269,14 @@ function formatClaimRow(claim, index) {
 function formatVerificationResult(result) {
   const claims = normalizedClaims(result);
   const errors = result && Array.isArray(result.errors) ? result.errors : [];
-  const items = claims.slice(0, 6).map((claim, index) => formatClaimRow(claim, index)).join("");
-  const truncated = claims.length > 6
-    ? `<div style="font-size:12px;color:#90abcf;margin-top:4px;">Showing first 6 of ${claims.length} claims.</div>`
-    : "";
+  const items = claims
+    .slice(0, 6)
+    .map((claim, index) => formatClaimRow(claim, index))
+    .join("");
+  const truncated =
+    claims.length > 6
+      ? `<div style="font-size:12px;color:#90abcf;margin-top:4px;">Showing first 6 of ${claims.length} claims.</div>`
+      : "";
   const errorNote = errors.length
     ? `<div style="font-size:12px;color:#ff9bb0;background:rgba(67,8,23,0.78);border:1px solid rgba(255,99,138,0.45);border-radius:8px;padding:8px;margin-top:6px;">Some claim checks failed: ${escapeHtml(errors[0])}</div>`
     : "";
@@ -254,14 +304,59 @@ function showError(message) {
   `);
 }
 
+let _loadingInterval = null;
+
 function showLoading() {
-  renderResultCard(`
+  const steps = [
+    "Extracting claims...",
+    "Searching fact sources...",
+    "Analyzing evidence...",
+    "Building verdicts...",
+    "Cross-referencing...",
+    "Finalizing results...",
+  ];
+  let stepIndex = 0;
+  let elapsed = 0;
+
+  if (_loadingInterval) {
+    clearInterval(_loadingInterval);
+    _loadingInterval = null;
+  }
+
+  const getHtml = (step, secs) => `
     <div style="padding-right:20px;">
-      <div style="font-size:12px;font-weight:700;letter-spacing:0.06em;color:#86e7ff;">TRUTHLENS</div>
-      <h3 style="margin:4px 0 8px;font-size:16px;color:#eef4ff;">Verifying claim...</h3>
-      <div style="font-size:13px;color:#90abcf;line-height:1.4;">This can take a few seconds while TruthLens investigates sources.</div>
+      <div style="font-size:11px;font-weight:700;letter-spacing:0.07em;color:#14b8a6;margin-bottom:4px;">TRUTHLENS ✦ LIVE</div>
+      <h3 style="margin:0 0 10px;font-size:15px;color:#eef4ff;">Verifying claim...</h3>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <div style="width:18px;height:18px;border:2px solid rgba(20,184,166,0.3);border-top-color:#14b8a6;border-radius:50%;animation:tl-spin 0.8s linear infinite;flex-shrink:0"></div>
+        <span style="font-size:12px;color:#14b8a6;font-weight:600;">${step}</span>
+      </div>
+      <div style="background:rgba(255,255,255,0.04);border-radius:999px;height:4px;overflow:hidden;margin-bottom:8px;">
+        <div style="height:100%;border-radius:999px;background:linear-gradient(90deg,#14b8a6,#3b82f6);width:${Math.min(100, (secs / 30) * 100)}%;transition:width 1s linear;"></div>
+      </div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.4);">⏱ ${secs}s elapsed &nbsp;·&nbsp; avg 10–30s for web research</div>
     </div>
-  `);
+  `;
+
+  // Inject keyframe animation once
+  if (!document.getElementById('tl-style')) {
+    const s = document.createElement('style');
+    s.id = 'tl-style';
+    s.textContent = '@keyframes tl-spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(s);
+  }
+
+  renderResultCard(getHtml(steps[0], 0));
+
+  _loadingInterval = setInterval(() => {
+    elapsed++;
+    stepIndex = Math.min(Math.floor(elapsed / 5), steps.length - 1);
+    if (cardEl) {
+      cardEl.innerHTML = `<button aria-label="Close TruthLens panel" style="position:absolute;right:11px;top:8px;border:none;background:transparent;cursor:pointer;color:#8fb8ff;font-size:16px;">×</button>${getHtml(steps[stepIndex], elapsed)}`;
+      const closeBtn = cardEl.querySelector('button');
+      if (closeBtn) closeBtn.addEventListener('click', () => { if (cardEl) { cardEl.remove(); cardEl = null; } clearInterval(_loadingInterval); });
+    }
+  }, 1000);
 }
 
 async function verifyCurrentSelection() {
@@ -273,11 +368,19 @@ async function verifyCurrentSelection() {
 
   const response = await sendRuntimeMessage({
     type: "VERIFY_CLAIM",
-    claim: selectedClaim
+    claim: selectedClaim,
   });
 
+  // Stop the loading animation
+  if (_loadingInterval) {
+    clearInterval(_loadingInterval);
+    _loadingInterval = null;
+  }
+
   if (!response || !response.ok) {
-    showError(response && response.error ? response.error : "Could not verify claim.");
+    showError(
+      response && response.error ? response.error : "Could not verify claim.",
+    );
     return;
   }
 
@@ -297,13 +400,15 @@ function renderVerifyButton(x, y) {
   buttonEl.style.padding = "8px 12px";
   buttonEl.style.border = "1px solid rgba(44, 141, 255, 0.38)";
   buttonEl.style.borderRadius = "999px";
-  buttonEl.style.background = "linear-gradient(90deg, #00bfff 0%, #2f7cff 52%, #7a3dff 100%)";
+  buttonEl.style.background =
+    "linear-gradient(90deg, #00bfff 0%, #2f7cff 52%, #7a3dff 100%)";
   buttonEl.style.color = "#eef6ff";
-  buttonEl.style.fontFamily = "\"Sora\", \"Space Grotesk\", sans-serif";
+  buttonEl.style.fontFamily = '"Sora", "Space Grotesk", sans-serif';
   buttonEl.style.fontSize = "12px";
   buttonEl.style.fontWeight = "650";
   buttonEl.style.cursor = "pointer";
-  buttonEl.style.boxShadow = "0 8px 22px rgba(20, 92, 255, 0.44), 0 0 14px rgba(0, 202, 255, 0.35)";
+  buttonEl.style.boxShadow =
+    "0 8px 22px rgba(20, 92, 255, 0.44), 0 0 14px rgba(0, 202, 255, 0.35)";
   buttonEl.addEventListener("click", verifyCurrentSelection);
 
   document.body.appendChild(buttonEl);
@@ -318,7 +423,12 @@ function updateSelectionUi() {
   const selection = window.getSelection();
   const claim = getSelectionText();
 
-  if (!selection || !claim || claim.length < MIN_SELECTION_LENGTH || selection.rangeCount === 0) {
+  if (
+    !selection ||
+    !claim ||
+    claim.length < MIN_SELECTION_LENGTH ||
+    selection.rangeCount === 0
+  ) {
     selectedClaim = "";
     cleanupFloatingUi();
     return;
@@ -340,19 +450,29 @@ function updateSelectionUi() {
 
 document.addEventListener("mouseup", () => {
   setTimeout(updateSelectionUi, 10);
-});
+}, { signal: _signal });
 
 document.addEventListener("keyup", (event) => {
-  if (event.key === "Shift" || event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown") {
+  if (
+    event.key === "Shift" ||
+    event.key === "ArrowLeft" ||
+    event.key === "ArrowRight" ||
+    event.key === "ArrowUp" ||
+    event.key === "ArrowDown"
+  ) {
     setTimeout(updateSelectionUi, 10);
   }
-});
+}, { signal: _signal });
 
-document.addEventListener("scroll", () => {
-  if (buttonEl && selectedClaim) {
-    setTimeout(updateSelectionUi, 5);
-  }
-}, { passive: true });
+document.addEventListener(
+  "scroll",
+  () => {
+    if (buttonEl && selectedClaim) {
+      setTimeout(updateSelectionUi, 5);
+    }
+  },
+  { passive: true, signal: _signal },
+);
 
 // Cleanup on page unload
 window.addEventListener("beforeunload", () => {
@@ -361,7 +481,7 @@ window.addEventListener("beforeunload", () => {
     cardEl.remove();
     cardEl = null;
   }
-});
+}, { signal: _signal });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (!message || !message.type) {
@@ -370,5 +490,94 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type === "GET_SELECTION") {
     sendResponse({ ok: true, data: { selection: getSelectionText() } });
+    return;
   }
+
+  if (message.type === "SHOW_IMAGE_RESULTS") {
+    // Remove loading card injected by background.js and show our rich formatted result
+    const existingCard = document.getElementById("truthlens-result-card");
+    if (existingCard) existingCard.remove();
+
+    const fakeResult = {
+      claims: message.claims || [],
+      segmentsAnalyzed: message.segmentsAnalyzed,
+    };
+    renderResultCard(formatVerificationResult(fakeResult));
+    sendResponse({ ok: true });
+    return;
+  }
+
 });
+
+async function analyzeImageFromUrl(imageUrl) {
+  if (!isExtensionContextValid()) return;
+
+  showLoading();
+
+  // Get settings (backendUrl + authToken) from service worker
+  const settingsResp = await sendRuntimeMessage({ type: "GET_SETTINGS" });
+  if (!settingsResp.ok || !settingsResp.data || !settingsResp.data.hasToken) {
+    if (_loadingInterval) { clearInterval(_loadingInterval); _loadingInterval = null; }
+    showError("Login required \u2014 open the TruthLens side panel and click \u2018Sync Web Auth\u2019 first.");
+    return;
+  }
+
+  const { backendUrl, authToken } = settingsResp.data;
+
+  try {
+    // Fetch the image as blob and convert to base64
+    const imgResp = await fetch(imageUrl);
+    if (!imgResp.ok) throw new Error("Could not download image from this page.");
+    const blob = await imgResp.blob();
+    const base64 = await new Promise((res, rej) => {
+      const reader = new FileReader();
+      reader.onload = (e) => res(e.target.result.split(",")[1]);
+      reader.onerror = rej;
+      reader.readAsDataURL(blob);
+    });
+
+    const apiResp = await fetch(`${backendUrl}/api/v3/investigate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${authToken}`,
+      },
+      body: JSON.stringify({ input_type: "image", content: base64 }),
+    });
+
+    if (_loadingInterval) { clearInterval(_loadingInterval); _loadingInterval = null; }
+
+    const data = await apiResp.json();
+    if (!apiResp.ok) {
+      showError(data.detail || "Media analysis failed.");
+      return;
+    }
+
+    // Reuse the same result formatter from content.js
+    const result = {
+      claims: (data.verified_claims || []).map(c => ({
+        claim: c.original_text,
+        verdict: c.verdict,
+        confidence: c.confidence,
+        evidenceSummary: c.evidence_summary,
+        evidenceCount: c.evidence_count,
+        sourcesChecked: c.sources_checked,
+        evidence: (c.evidence || []).map(e => ({
+          sourceUrl: e.source_url,
+          sourceDomain: e.source_domain,
+          stance: e.stance,
+          trustScore: e.trust_score,
+          stanceConfidence: e.stance_confidence,
+          textPreview: e.text_preview,
+          sourceType: e.source_type,
+        })),
+      })),
+      segmentsAnalyzed: data.metadata ? data.metadata.claims_verified : undefined,
+    };
+
+    renderResultCard(formatVerificationResult(result));
+  } catch (err) {
+    if (_loadingInterval) { clearInterval(_loadingInterval); _loadingInterval = null; }
+    showError(err && err.message ? err.message : "Unexpected error analysing image.");
+  }
+}

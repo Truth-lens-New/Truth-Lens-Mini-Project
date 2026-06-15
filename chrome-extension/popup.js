@@ -19,13 +19,21 @@ function setStatus(text, isError = false) {
 function setResult(text, isError = false) {
   const el = document.getElementById("result");
   el.textContent = text;
-  el.classList.toggle("error", isError);
+  el.classList.remove("hidden");
+  el.className = `mt-4 p-3 rounded-xl text-xs leading-relaxed border ${isError
+    ? "bg-red-900/20 border-red-500/30 text-red-400"
+    : "bg-black/30 border-white/10 text-foreground/70"
+    }`;
 }
 
 function setResultHtml(html, isError = false) {
   const el = document.getElementById("result");
   el.innerHTML = html;
-  el.classList.toggle("error", isError);
+  el.classList.remove("hidden");
+  el.className = `mt-4 p-0 rounded-xl text-sm leading-relaxed space-y-0 overflow-hidden border ${isError
+    ? "bg-red-900/20 border-red-500/30"
+    : "bg-black/20 border-white/10"
+    }`;
 }
 
 function escapeHtml(value) {
@@ -50,8 +58,8 @@ function normalizedClaims(result) {
       confidence: Number(result.confidence) || 0,
       evidenceSummary: result.evidenceSummary || "No explanation returned.",
       evidenceCount: result.evidenceCount || 0,
-      sourcesChecked: result.sourcesChecked || 0
-    }
+      sourcesChecked: result.sourcesChecked || 0,
+    },
   ];
 }
 
@@ -73,7 +81,8 @@ function sourceRows(claim) {
 
   evidence.forEach((item) => {
     const sourceUrl = item && item.sourceUrl ? String(item.sourceUrl) : "";
-    const sourceDomain = item && item.sourceDomain ? String(item.sourceDomain) : "unknown";
+    const sourceDomain =
+      item && item.sourceDomain ? String(item.sourceDomain) : "unknown";
     const key = sourceUrl || sourceDomain;
     if (!key || seen.has(key)) {
       return;
@@ -83,7 +92,7 @@ function sourceRows(claim) {
       sourceUrl,
       sourceDomain,
       stance: item && item.stance ? item.stance : "neutral",
-      trustScore: item && item.trustScore ? Number(item.trustScore) : 0
+      trustScore: item && item.trustScore ? Number(item.trustScore) : 0,
     });
   });
 
@@ -92,19 +101,22 @@ function sourceRows(claim) {
   const top = deduped.slice(0, 3);
   const rest = deduped.slice(3);
 
-  const topHtml = top.map((source) => {
-    const link = source.sourceUrl
-      ? `<a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open</a>`
-      : `<span class="no-link">No link</span>`;
-    return `<div class="source-row">
+  const topHtml = top
+    .map((source) => {
+      const link = source.sourceUrl
+        ? `<a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open</a>`
+        : `<span class="no-link">No link</span>`;
+      return `<div class="source-row">
       <span class="source-domain">${escapeHtml(source.sourceDomain)}</span>
       <span class="source-stance" style="color:${stanceColor(source.stance)}">${escapeHtml(String(source.stance).toUpperCase())}</span>
       ${link}
     </div>`;
-  }).join("");
+    })
+    .join("");
 
   const restHtml = rest.length
-    ? `<details class="source-more"><summary>Show ${rest.length} more</summary>${rest.map((source) => {
+    ? `<details class="source-more"><summary>Show ${rest.length} more</summary>${rest
+      .map((source) => {
         const link = source.sourceUrl
           ? `<a href="${escapeHtml(source.sourceUrl)}" target="_blank" rel="noopener noreferrer">Open</a>`
           : `<span class="no-link">No link</span>`;
@@ -113,7 +125,8 @@ function sourceRows(claim) {
           <span class="source-stance" style="color:${stanceColor(source.stance)}">${escapeHtml(String(source.stance).toUpperCase())}</span>
           ${link}
         </div>`;
-      }).join("")}</details>`
+      })
+      .join("")}</details>`
     : "";
 
   if (!topHtml) {
@@ -123,33 +136,49 @@ function sourceRows(claim) {
   return `<div class="sources-wrap">${topHtml}${restHtml}</div>`;
 }
 
+function verdictColor(verdict) {
+  const v = String(verdict || "").toLowerCase();
+  if (v.includes("true") || v.includes("support")) return { bg: "rgba(16,185,129,0.12)", border: "rgba(16,185,129,0.3)", text: "#10b981" };
+  if (v.includes("false") || v.includes("refut")) return { bg: "rgba(239,68,68,0.12)", border: "rgba(239,68,68,0.3)", text: "#f87171" };
+  if (v.includes("unverified") || v.includes("mixed")) return { bg: "rgba(234,179,8,0.12)", border: "rgba(234,179,8,0.3)", text: "#eab308" };
+  return { bg: "rgba(148,163,184,0.08)", border: "rgba(148,163,184,0.2)", text: "#94a3b8" };
+}
+
 function formatResultHtml(result) {
   const claims = normalizedClaims(result);
-  const header = `<div class="result-header">Analyzed ${claims.length} claim(s)${result.segmentsAnalyzed ? ` across ${result.segmentsAnalyzed} segment(s)` : ""}.</div>`;
+  const meta = `<div style="padding:10px 14px 8px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:11px;color:rgba(255,255,255,0.45)">Analyzed ${claims.length} claim(s)${result.segmentsAnalyzed ? ` across ${result.segmentsAnalyzed} segment(s)` : ""}</div>`;
 
   const claimHtml = claims.slice(0, 6).map((claim, index) => {
     const confidence = Math.round((Number(claim.confidence) || 0) * 100);
-    return `<div class="claim-block">
-      <div class="claim-index">Claim ${index + 1}</div>
-      <div class="claim-text">${escapeHtml(String(claim.claim || "").slice(0, 170))}</div>
-      <div class="claim-meta">
-        <span class="claim-verdict">${escapeHtml(String(claim.verdict || "unknown").toUpperCase())}</span>
-        <span>${confidence}%</span>
-        <span>evidence ${claim.evidenceCount || 0}</span>
+    const vc = verdictColor(claim.verdict);
+    const evidence = claim.evidence && Array.isArray(claim.evidence) ? claim.evidence : [];
+    const topSources = evidence.slice(0, 3).map(e => {
+      const domain = e.sourceUrl
+        ? `<a href="${escapeHtml(e.sourceUrl)}" target="_blank" rel="noopener noreferrer" style="color:#60a5fa;text-decoration:underline;font-size:11px">${escapeHtml(e.sourceDomain || e.sourceUrl)}</a>`
+        : `<span style="color:rgba(255,255,255,0.35);font-size:11px">${escapeHtml(e.sourceDomain || "unknown")}</span>`;
+      const stanceC = e.stance && e.stance.includes("support") ? "#10b981" : e.stance && e.stance.includes("refut") ? "#f87171" : "#94a3b8";
+      return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0">${domain}<span style="color:${stanceC};font-size:10px;font-weight:600">${escapeHtml((e.stance || "neutral").toUpperCase())}</span></div>`;
+    }).join("");
+
+    return `<div style="padding:12px 14px;border-bottom:1px solid rgba(255,255,255,0.05)">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+        <span style="font-size:10px;color:rgba(255,255,255,0.4);font-weight:600">CLAIM ${index + 1}</span>
+        <span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:999px;background:${vc.bg};border:1px solid ${vc.border};color:${vc.text}">${escapeHtml(String(claim.verdict || "unknown").toUpperCase())} · ${confidence}%</span>
       </div>
-      <div class="claim-summary">${escapeHtml(claim.evidenceSummary || "No explanation returned.")}</div>
-      ${sourceRows(claim)}
+      <div style="font-size:12px;color:rgba(255,255,255,0.8);margin-bottom:6px;line-height:1.5">${escapeHtml(String(claim.claim || "").slice(0, 180))}</div>
+      <div style="font-size:11px;color:rgba(255,255,255,0.5);line-height:1.5;margin-bottom:${topSources ? 8 : 0}px">${escapeHtml(claim.evidenceSummary || "No explanation returned.")}</div>
+      ${topSources ? `<div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:6px">${topSources}</div>` : ""}
     </div>`;
   }).join("");
 
   const extra = claims.length > 6
-    ? `<div class="result-note">Showing first 6 of ${claims.length} claims.</div>`
+    ? `<div style="padding:8px 14px;font-size:11px;color:rgba(255,255,255,0.35)">Showing first 6 of ${claims.length} claims.</div>`
     : "";
   const warning = Array.isArray(result.errors) && result.errors.length
-    ? `<div class="result-warning">Warnings: ${escapeHtml(result.errors[0])}</div>`
+    ? `<div style="padding:8px 14px;font-size:11px;color:#f87171">⚠ ${escapeHtml(result.errors[0])}</div>`
     : "";
 
-  return `${header}${claimHtml}${extra}${warning}`;
+  return `${meta}${claimHtml}${extra}${warning}`;
 }
 
 async function loadSettings() {
@@ -160,7 +189,8 @@ async function loadSettings() {
   }
 
   const { backendUrl, hasToken, authEmail } = response.data;
-  document.getElementById("backendUrl").value = backendUrl || "http://localhost:8000";
+  document.getElementById("backendUrl").value =
+    backendUrl || "http://localhost:8000";
 
   if (hasToken) {
     setStatus(`Logged in as ${authEmail || "user"}.`);
@@ -183,7 +213,7 @@ async function saveBackendUrl() {
 function credentials() {
   return {
     email: document.getElementById("email").value.trim(),
-    password: document.getElementById("password").value
+    password: document.getElementById("password").value,
   };
 }
 
@@ -253,49 +283,72 @@ async function logout() {
 }
 
 async function importWebSessionToken() {
-  setStatus("Importing web session...");
+  setStatus("Scanning for TruthLens web session...");
 
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || typeof tab.id !== "number") {
-    setStatus("Could not access active tab.", true);
+  // Find ANY open TruthLens tab automatically (doesn't need to be active)
+  let tabs = [];
+  try {
+    tabs = await chrome.tabs.query({ url: "http://localhost:5173/*" });
+  } catch {
+    tabs = [];
+  }
+
+  // Fallback: also search http://127.0.0.1:5173/*
+  if (!tabs.length) {
+    try {
+      const fallback = await chrome.tabs.query({ url: "http://127.0.0.1:5173/*" });
+      tabs = fallback;
+    } catch {
+      tabs = [];
+    }
+  }
+
+  if (!tabs.length) {
+    setStatus("TruthLens web app isn't open. Open it at localhost:5173 and try again.", true);
     return;
   }
 
+  const tab = tabs[0];
   let token = "";
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
         try {
-          return localStorage.getItem("token") || "";
+          // Try all common storage keys used by auth libs
+          return (
+            localStorage.getItem("token") ||
+            localStorage.getItem("access_token") ||
+            localStorage.getItem("authToken") ||
+            sessionStorage.getItem("token") ||
+            sessionStorage.getItem("access_token") ||
+            ""
+          );
         } catch {
           return "";
         }
-      }
+      },
     });
     token = results && results[0] && results[0].result ? String(results[0].result) : "";
   } catch {
-    setStatus("Open the TruthLens web app tab first, then try again.", true);
+    setStatus("Could not read from TruthLens tab. Check extension permissions.", true);
     return;
   }
 
   if (!token) {
-    setStatus("No web token found on this tab. Login on the web app first.", true);
+    setStatus("Not logged in on TruthLens web app. Please login there first.", true);
     return;
   }
 
-  const backendUrlInput = document.getElementById("backendUrl").value.trim() || "http://localhost:8000";
-  const backendUrl = backendUrlInput.replace(/\/$/, "");
+  const backendUrl = (document.getElementById("backendUrl").value.trim() || "http://localhost:8000").replace(/\/$/, "");
 
   let profile;
   try {
     const response = await fetch(`${backendUrl}/auth/me`, {
-      headers: {
-        "Authorization": `Bearer ${token}`
-      }
+      headers: { Authorization: `Bearer ${token}` },
     });
     if (!response.ok) {
-      throw new Error("Web token is invalid for this backend.");
+      throw new Error("Token is invalid or backend is offline.");
     }
     profile = await response.json();
   } catch (error) {
@@ -306,18 +359,14 @@ async function importWebSessionToken() {
   try {
     await new Promise((resolve, reject) => {
       chrome.storage.local.set(
-        {
-          authToken: token,
-          authEmail: profile && profile.email ? profile.email : "",
-          backendUrl
-        },
+        { authToken: token, authEmail: profile && profile.email ? profile.email : "", backendUrl },
         () => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
           } else {
             resolve();
           }
-        }
+        },
       );
     });
   } catch (error) {
@@ -325,7 +374,20 @@ async function importWebSessionToken() {
     return;
   }
 
-  setStatus(`Synced with web login as ${profile && profile.email ? profile.email : "user"}.`);
+  const email = profile && profile.email ? profile.email : "user";
+  setStatus(`✅ Synced! Logged in as ${email}.`);
+
+  // Update the auth status badge
+  const statusEl = document.getElementById("authStatus");
+  if (statusEl) {
+    statusEl.textContent = `Logged in as ${email}`;
+    statusEl.classList.remove("text-foreground/60");
+    statusEl.classList.add("text-success");
+  }
+
+  // Show logout button, hide login/register
+  const logoutBtn = document.getElementById("logoutBtn");
+  if (logoutBtn) logoutBtn.classList.remove("hidden");
 }
 
 async function useSelectedText() {
@@ -335,8 +397,11 @@ async function useSelectedText() {
     return;
   }
 
-  const response = await chrome.tabs.sendMessage(tab.id, { type: "GET_SELECTION" }).catch(() => null);
-  const selected = response && response.ok && response.data ? response.data.selection : "";
+  const response = await chrome.tabs
+    .sendMessage(tab.id, { type: "GET_SELECTION" })
+    .catch(() => null);
+  const selected =
+    response && response.ok && response.data ? response.data.selection : "";
 
   if (!selected) {
     setResult("No text selected. Highlight text on the page first.", true);
@@ -354,19 +419,142 @@ async function verify() {
     return;
   }
 
-  setResult("Verifying... this may take several seconds.");
+  const btn = document.getElementById("verifyBtn");
+  const originalText = btn.textContent;
+  btn.textContent = "Analyzing...";
+  btn.disabled = true;
+
+  setResult("⏳ Running forensic analysis... this takes 5–30 seconds.");
+
   const response = await sendMessage({ type: "VERIFY_CLAIM", claim });
+  btn.textContent = originalText;
+  btn.disabled = false;
 
   if (!response.ok) {
     setResult(response.error || "Verification failed.", true);
     if (response.code === "AUTH_REQUIRED") {
-      setStatus("Please login before verifying claims.", true);
+      setStatus("Please login (or Sync Web Auth) before verifying.", true);
     }
     return;
   }
 
   setResultHtml(formatResultHtml(response.data));
 }
+
+async function verifyMedia() {
+  const fileInput = document.getElementById("mediaInput");
+  const file = fileInput && fileInput.files && fileInput.files[0];
+  if (!file) {
+    showMediaResult("Please choose an image or video file first.", true);
+    return;
+  }
+
+  const settings = await sendMessage({ type: "GET_SETTINGS" });
+  if (!settings.ok || !settings.data.hasToken) {
+    showMediaResult("Login required. Use Sync Web Auth first.", true);
+    return;
+  }
+
+  const { backendUrl, authToken } = settings.data;
+  const mediaBtn = document.getElementById("mediaVerifyBtn");
+  mediaBtn.textContent = "Analyzing...";
+  mediaBtn.disabled = true;
+
+  showMediaResult("⏳ Running deepfake detection...");
+
+  try {
+    // Use multipart FormData — the correct way to call /api/v1/analyze-media
+    const formData = new FormData();
+    formData.append("file", file);
+
+    const response = await fetch(`${backendUrl}/api/v1/analyze-media`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${authToken}` },
+      // NO Content-Type header — browser sets it automatically with boundary for FormData
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      showMediaResult(`Error: ${data.detail || "Media analysis failed."}`, true);
+      return;
+    }
+
+    // Render deepfake result card
+    renderDeepfakeResult(data);
+  } catch (err) {
+    showMediaResult(`Error: ${err.message || "Unexpected error."}`, true);
+  } finally {
+    mediaBtn.textContent = "Analyze Media";
+    mediaBtn.disabled = false;
+  }
+}
+
+function showMediaResult(text, isError = false) {
+  const el = document.getElementById("mediaResult");
+  el.textContent = text;
+  el.style.display = "block";
+  el.style.color = isError ? "#f87171" : "rgba(255,255,255,0.6)";
+  el.style.padding = "10px 12px";
+  el.style.border = `1px solid ${isError ? "rgba(239,68,68,0.2)" : "rgba(255,255,255,0.08)"}`;
+  el.style.borderRadius = "12px";
+  el.style.background = "rgba(0,0,0,0.3)";
+}
+
+function renderDeepfakeResult(data) {
+  const el = document.getElementById("mediaResult");
+  el.style.display = "block";
+  el.style.padding = "0";
+  el.style.border = "1px solid rgba(255,255,255,0.1)";
+  el.style.borderRadius = "12px";
+  el.style.overflow = "hidden";
+  el.style.background = "rgba(0,0,0,0.2)";
+
+  const verdict = String(data.verdict || "UNKNOWN").toUpperCase();
+  const isFake = verdict === "FAKE";
+  const verdictColor = isFake ? "#f87171" : "#10b981";
+  const verdictBg = isFake ? "rgba(239,68,68,0.12)" : "rgba(16,185,129,0.12)";
+
+  const fakePct = Math.round(data.fake_probability || 0);
+  const realPct = Math.round(data.real_probability || 0);
+  const conf = Math.round(data.confidence || 0);
+
+  const evidenceHtml = (data.evidence || []).map(e =>
+    `<div style="display:flex;align-items:flex-start;gap:6px;font-size:11px;color:rgba(255,255,255,0.5);margin-bottom:4px">
+      <span style="color:#14b8a6;flex-shrink:0">›</span>${e}
+    </div>`
+  ).join("");
+
+  el.innerHTML = `
+    <div style="padding:12px 14px 8px;border-bottom:1px solid rgba(255,255,255,0.06)">
+      <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:6px">DEEPFAKE DETECTION · ${data.model || "EfficientNet-B0"}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:18px;font-weight:700;color:${verdictColor}">${verdict}</span>
+        <span style="font-size:11px;padding:3px 10px;border-radius:999px;background:${verdictBg};color:${verdictColor};border:1px solid ${verdictColor}33">${conf}% confidence</span>
+      </div>
+    </div>
+    <div style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,0.06)">
+      <div style="font-size:10px;color:rgba(255,255,255,0.35);margin-bottom:6px">PROBABILITY BREAKDOWN</div>
+      <div style="display:flex;gap:8px;margin-bottom:6px">
+        <div style="flex:1">
+          <div style="font-size:10px;color:#f87171;margin-bottom:3px">FAKE ${fakePct}%</div>
+          <div style="height:4px;border-radius:999px;background:rgba(255,255,255,0.06)">
+            <div style="height:100%;width:${fakePct}%;background:#f87171;border-radius:999px"></div>
+          </div>
+        </div>
+        <div style="flex:1">
+          <div style="font-size:10px;color:#10b981;margin-bottom:3px">REAL ${realPct}%</div>
+          <div style="height:4px;border-radius:999px;background:rgba(255,255,255,0.06)">
+            <div style="height:100%;width:${realPct}%;background:#10b981;border-radius:999px"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    ${evidenceHtml ? `<div style="padding:10px 14px">${evidenceHtml}</div>` : ""}
+  `;
+}
+
 
 document.getElementById("saveUrl").addEventListener("click", saveBackendUrl);
 document.getElementById("loginBtn").addEventListener("click", login);
@@ -375,5 +563,13 @@ document.getElementById("logoutBtn").addEventListener("click", logout);
 document.getElementById("importWebToken").addEventListener("click", importWebSessionToken);
 document.getElementById("grabSelection").addEventListener("click", useSelectedText);
 document.getElementById("verifyBtn").addEventListener("click", verify);
+document.getElementById("mediaVerifyBtn").addEventListener("click", verifyMedia);
+
+// Preview selected file name
+document.getElementById("mediaInput").addEventListener("change", (e) => {
+  const file = e.target.files && e.target.files[0];
+  const label = document.getElementById("mediaLabel");
+  if (label) label.textContent = file ? `📁 ${file.name}` : "Choose image or video";
+});
 
 loadSettings();

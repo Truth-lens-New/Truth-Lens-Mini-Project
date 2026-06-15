@@ -28,7 +28,12 @@ class Settings(BaseSettings):
     google_factcheck_api_key: str = ""
     gnews_api_key: str = ""
     groq_api_key: str = ""
-    
+
+    # Twilio WhatsApp Bot
+    twilio_account_sid: str = ""
+    twilio_auth_token: str = ""
+    twilio_whatsapp_from: str = "whatsapp:+14155238886"  # Twilio sandbox default
+
     # CORS
     backend_cors_origins: str = '["http://localhost:5173","http://localhost:3000"]'
     
