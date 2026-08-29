@@ -63,13 +63,21 @@ class ClaimClassifier:
         
         return typed_claims
     
-    # Opinion keywords - if present, likely an opinion
+    # Strong opinion indicators - subjective value judgments
+    # NOTE: Removed 'should', 'ought to', 'must be' - these appear in factual
+    # statements about requirements. Kept only clear subjective markers.
     OPINION_KEYWORDS = [
         'best', 'worst', 'great', 'terrible', 'amazing', 'awful',
         'love', 'hate', 'nice', 'bad', 'good', 'beautiful', 'ugly',
         'favorite', 'favourite', 'perfect', 'horrible', 'wonderful',
         'i think', 'i believe', 'i feel', 'in my opinion', 'personally',
-        'should', 'ought to', 'must be', 'prettier', 'nicer', 'better'
+        'prettier', 'nicer', 'better', 'worse'
+    ]
+    
+    # Prescriptive keywords - indicate a statement about requirements/obligations
+    # These alone don't indicate opinion; used only in context-aware checking
+    PRESCRIPTIVE_KEYWORDS = [
+        'should', 'ought to', 'must be'
     ]
     
     # Prediction keywords - future events
@@ -223,8 +231,30 @@ class ClaimClassifier:
         )
     
     def _is_likely_opinion(self, text: str) -> bool:
-        """Check if text contains opinion keywords."""
-        return any(kw in text for kw in self.OPINION_KEYWORDS)
+        """
+        Check if text contains clear opinion indicators.
+        
+        Opinion detection requires:
+        1. Presence of subjective keywords (best, worst, love, hate, etc.)
+        2. OR presence of explicit opinion markers (i think, i believe, in my opinion)
+        
+        Prescriptive language alone (should, ought, must be) does NOT make it an opinion.
+        """
+        # Check for explicit subjective value judgments
+        if any(kw in text for kw in self.OPINION_KEYWORDS):
+            return True
+        
+        # Check if prescriptive language is combined with subjective markers
+        # e.g., "Companies should be transparent" - "should" + evaluative word "transparent"
+        has_prescriptive = any(kw in text for kw in self.PRESCRIPTIVE_KEYWORDS)
+        if has_prescriptive:
+            # Check for subjective descriptors that would make this an opinion
+            subjective_terms = ['bad', 'good', 'better', 'worse', 'best', 'worst', 
+                               'beautiful', 'ugly', 'perfect', 'terrible', 'amazing', 'awful']
+            if any(term in text for term in subjective_terms):
+                return True
+        
+        return False
     
     def classify_text(self, text: str) -> TypedClaim:
         """

@@ -1,0 +1,29 @@
+Slide 1 - Title
+“Good morning/afternoon. We are presenting TruthLens, a multi-modal misinformation detection platform. The goal is to verify claims from text and URLs using evidence-backed AI outputs, so users can quickly judge credibility.”
+
+Slide 2 - Overview
+“This is our roadmap for the presentation: topic selection, research classification, methodology and design, system plus evaluation, report structure, and final conclusions with future scope.”
+
+Slide 3 - Topic Selection
+“We selected this topic through four steps: problem scanning, literature scan, feasibility analysis, and final selection. We saw misinformation rising, found gaps in existing tools, checked API and tech feasibility, and chose TruthLens because it is socially relevant and practically buildable.”
+
+Slide 4 - Research Type Classification
+“Our project is not limited to one type. It is applied because we built a usable system, exploratory because we tested multiple pipeline combinations, descriptive because we analyzed claim and source behavior, and design science because we produced and evaluated a working artifact.”
+
+Slide 5 - Method & Methodology
+“We followed a hybrid method: software engineering lifecycle plus experimental evaluation. We moved step-by-step from defining objectives, reviewing gaps, designing architecture, implementing modules, integrating APIs, testing, and finally documenting insights.”
+
+Slide 6 - Research Design (Variables)
+“Independent variables were pipeline configuration and evidence-source mix. Dependent variables were verdict quality, accuracy-related measures, and latency. Extraneous variables included API limits and ambiguous claims. We handled those with fallback logic and repeated test runs.”
+
+Slide 7 - Data Collection & System Snapshot
+“Our primary data came from user claims/URLs and live APIs. Secondary data included domain trust seeds and misinformation references. We applied normalization and filtering for quality. Technically, we built a React frontend, FastAPI backend, and PostgreSQL with Docker deployment.”
+
+Slide 8 - Evaluation
+“We used layered evaluation: functional checks for correctness, scenario testing for real cases, performance checks for speed, and qualitative review for usefulness. This helped us validate both engineering quality and practical value.”
+
+Slide 9 - Report Structure
+“Our paper is organized from abstract and introduction to methodology, system design, results, and conclusion. The abstract emphasizes our hybrid pipeline and key insight: combining evidence sources improves verification quality, though API dependency and claim ambiguity remain challenges.”
+
+Slide 10 - Conclusion & Future Scope
+“In summary, TruthLens is a working applied research artifact selected through relevance-gap-feasibility analysis. Future work includes stronger multimodal deepfake detection, larger benchmark datasets, and better explainability. Our core aim is faster, transparent, evidence-driven verification.”

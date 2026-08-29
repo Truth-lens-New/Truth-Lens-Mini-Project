@@ -340,3 +340,17 @@ export async function checkV3Health(): Promise<{ status: string; version: string
     const response = await fetch(`${API_URL}/api/v3/health`);
     return response.json();
 }
+
+// --- Chatbot ---
+
+export interface ChatMessage {
+    role: 'user' | 'model';
+    content: string;
+}
+
+export async function sendChatMessage(messages: ChatMessage[]): Promise<{ response: string }> {
+    return authFetch('/api/v1/chat/message', {
+        method: 'POST',
+        body: JSON.stringify({ messages }),
+    });
+}
