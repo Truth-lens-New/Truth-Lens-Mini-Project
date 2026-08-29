@@ -233,6 +233,7 @@ class InvestigateRequestV3(BaseModel):
 
 class EvidenceResponse(BaseModel):
     """Single evidence item in response."""
+    source_url: Optional[str] = None
     source_domain: str
     source_type: str
     stance: str
@@ -371,6 +372,7 @@ async def investigate_content(
             # Build evidence list for response
             evidence = [
                 EvidenceResponse(
+                    source_url=e.source_url,
                     source_domain=e.source_domain,
                     source_type=e.source_type.value,
                     stance=e.stance.value,

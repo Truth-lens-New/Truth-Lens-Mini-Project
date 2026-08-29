@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TruthLens Research Presentation Content</title>
+  <style>
+    body { font-family: Calibri, Arial, sans-serif; line-height: 1.45; margin: 30px; color: #111; }
+    h1, h2, h3 { color: #0a3d62; }
+    h1 { font-size: 28px; margin-bottom: 6px; }
+    h2 { font-size: 20px; margin-top: 26px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+    h3 { font-size: 16px; margin-top: 14px; }
+    p, li { font-size: 12.5pt; }
+    ul { margin-top: 6px; }
+    .meta { color: #444; margin-bottom: 20px; }
+    .slide { page-break-after: always; }
+    .notes { background: #f7f9fb; border-left: 4px solid #74b9ff; padding: 10px 12px; margin-top: 10px; }
+    .notes b { color: #0a3d62; }
+    .small { font-size: 11.5pt; }
+  </style>
+</head>
+<body>
+  <h1>TruthLens Presentation Draft</h1>
+  <p class="meta">Prepared for academic project presentation | Topic: Multi-Modal Misinformation Detection</p>
+
+  <div class="slide">
+    <h2>Slide 1: Title Slide</h2>
+    <ul>
+      <li><b>Project Title:</b> TruthLens - Multi-Modal Misinformation Detection Platform</li>
+      <li><b>Team:</b> Shivam Yadav, Harsh Rupreja, Uday Dewani</li>
+      <li><b>Course/Department:</b> [Fill as needed]</li>
+      <li><b>Date:</b> [Presentation date]</li>
+    </ul>
+    <div class="notes"><b>Speaker Notes:</b> Introduce the project as a practical AI system to verify claims from text/URLs and provide evidence-backed verdicts.</div>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 2: Agenda</h2>
+    <ul>
+      <li>How we selected the project topic (initial research)</li>
+      <li>Research type classification</li>
+      <li>Research method and methodology</li>
+      <li>Research design (variables)</li>
+      <li>Data collection methods</li>
+      <li>Image and video detection workflow</li>
+      <li>Research paper/report writing structure</li>
+      <li>Conclusion and future scope</li>
+    </ul>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 3: How We Chose the Project Topic (Initial Research)</h2>
+    <h3>Step 1: Problem Scanning</h3>
+    <ul>
+      <li>Observed rapid growth of fake news, manipulated media, and misleading social content.</li>
+      <li>Identified user pain point: difficult and slow manual verification of online claims.</li>
+    </ul>
+    <h3>Step 2: Literature and Platform Scan</h3>
+    <ul>
+      <li>Reviewed fact-checking workflows and existing tools.</li>
+      <li>Found a gap: many tools are single-modal or not user-friendly for quick checks.</li>
+    </ul>
+    <h3>Step 3: Feasibility Analysis</h3>
+    <ul>
+      <li>Checked API availability (Google Fact Check, GNews) and model support.</li>
+      <li>Confirmed stack feasibility (FastAPI, React, PostgreSQL, Docker) within mini-project timeline.</li>
+    </ul>
+    <h3>Step 4: Final Topic Selection</h3>
+    <ul>
+      <li>Selected TruthLens because it has social relevance, measurable outcomes, and practical implementation scope.</li>
+    </ul>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 4: Research Type Classification</h2>
+    <ul>
+      <li><b>Applied Research:</b> Built a real, usable verification platform for end users.</li>
+      <li><b>Exploratory Research:</b> Tested combinations of evidence retrieval, stance analysis, and aggregation logic.</li>
+      <li><b>Descriptive Research:</b> Studied claim patterns, source trust behavior, and response outputs.</li>
+      <li><b>Design Science Orientation:</b> Created and evaluated an artifact (software system) to solve a practical problem.</li>
+    </ul>
+    <div class="notes"><b>Speaker Notes:</b> Mention that one project can include multiple research types based on objectives and phases.</div>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 5: Research Method and Methodology</h2>
+    <h3>Method Used</h3>
+    <ul>
+      <li>Hybrid method: software engineering lifecycle + experimental evaluation.</li>
+    </ul>
+    <h3>Methodology Steps</h3>
+    <ol>
+      <li>Define problem statement and objectives.</li>
+      <li>Review existing solutions and identify research gap.</li>
+      <li>Design system architecture and pipeline stages.</li>
+      <li>Collect and prepare data/evidence sources.</li>
+      <li>Implement backend services and frontend interface.</li>
+      <li>Integrate external APIs and verification components.</li>
+      <li>Run functional and accuracy-oriented testing.</li>
+      <li>Analyze results, refine thresholds, and document findings.</li>
+    </ol>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 6: Research Design (Variables)</h2>
+    <h3>Independent Variables (What We Change)</h3>
+    <ul>
+      <li>Evidence source mix (fact-check API, news API, trust scoring).</li>
+      <li>Model/pipeline configuration and aggregation logic.</li>
+      <li>Input type and quality (claim text, URL extraction quality).</li>
+    </ul>
+    <h3>Dependent Variables (What We Measure)</h3>
+    <ul>
+      <li>Verdict quality/accuracy.</li>
+      <li>Precision/recall style performance on test claims.</li>
+      <li>System latency and user-perceived usefulness.</li>
+    </ul>
+    <h3>Extraneous Variables (Noise/Uncontrolled Factors)</h3>
+    <ul>
+      <li>API rate limits, outages, or network delays.</li>
+      <li>Ambiguous claims and rapidly changing real-world events.</li>
+      <li>Bias or inconsistency in external evidence sources.</li>
+    </ul>
+    <h3>Controls/Mitigation</h3>
+    <ul>
+      <li>Fallback logic, confidence blending, and source cross-validation.</li>
+      <li>Consistent test sets and repeated trial runs.</li>
+    </ul>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 7: Data Collection Methods Used</h2>
+    <h3>Primary Data Collection</h3>
+    <ul>
+      <li>User-provided claims and URLs through the application.</li>
+      <li>User-uploaded media inputs (images and short videos) for forensic checks.</li>
+      <li>Live evidence from Google Fact Check API and GNews API.</li>
+    </ul>
+    <h3>Secondary Data Collection</h3>
+    <ul>
+      <li>Domain trust seed data.</li>
+      <li>Known misinformation references and curated datasets.</li>
+      <li>Deepfake image model weights and benchmark references for media analysis.</li>
+      <li>Technical documentation and prior studies for system design decisions.</li>
+    </ul>
+    <h3>Data Quality Steps</h3>
+    <ul>
+      <li>Normalization, deduplication, and relevance filtering.</li>
+      <li>Frame sampling and preprocessing checks for video reliability.</li>
+      <li>Source credibility weighting in verdict aggregation.</li>
+    </ul>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 8: System Snapshot (What We Built)</h2>
+    <ul>
+      <li><b>Frontend:</b> React + TypeScript (interactive verification UI).</li>
+      <li><b>Backend:</b> FastAPI services for claim extraction, evidence retrieval, stance analysis, and aggregation.</li>
+      <li><b>Database:</b> PostgreSQL for user/auth/history data.</li>
+      <li><b>Infrastructure:</b> Docker Compose for reproducible local deployment.</li>
+      <li><b>Output:</b> Structured verdict + confidence + evidence + explanation (when LLM key is configured).</li>
+    </ul>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 9: Image and Video Detection in TruthLens</h2>
+    <h3>Image Detection</h3>
+    <ul>
+      <li>Deepfake classifier based on EfficientNet-B0 checks image authenticity.</li>
+      <li>Metadata/EXIF analysis looks for AI-generation or manipulation signals.</li>
+      <li>Grad-CAM heatmap highlights suspicious visual regions.</li>
+    </ul>
+    <h3>Video Detection</h3>
+    <ul>
+      <li>Uploaded videos are handled in the media pipeline with frame-level analysis flow.</li>
+      <li>Frame consistency indicators are used to flag possible manipulation patterns.</li>
+      <li>Results are presented with confidence, evidence indicators, and verdict summary.</li>
+    </ul>
+    <div class="notes"><b>Speaker Notes:</b> Mention that image detection is currently deeper and more mature; video analysis uses frame-centric forensic signals and can be expanded in future work.</div>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 10: Evaluation Approach</h2>
+    <ul>
+      <li>Functional testing for API endpoints and workflow validity.</li>
+      <li>Scenario-based testing with true/false/mixed claims.</li>
+      <li>Media tests for image deepfake detection and video-frame consistency behavior.</li>
+      <li>Performance checks for response speed and system stability.</li>
+      <li>Qualitative review of explanation clarity and evidence usefulness.</li>
+    </ul>
+    <div class="notes"><b>Speaker Notes:</b> If you have numbers from your tests, add a table with 3-5 key metrics here.</div>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 11: Report Writing Structure (Research Paper Overview)</h2>
+    <ol>
+      <li><b>Abstract:</b> Problem, method, key outcome in 150-250 words.</li>
+      <li><b>Introduction:</b> Context, motivation, and need for misinformation detection.</li>
+      <li><b>Literature Review:</b> Existing tools, methods, and limitations.</li>
+      <li><b>Problem Statement & Objectives:</b> Clear research goals and scope.</li>
+      <li><b>Methodology:</b> Systematic process followed in the project.</li>
+      <li><b>System Design/Implementation:</b> Architecture and module details.</li>
+      <li><b>Results and Discussion:</b> Findings, interpretation, and comparisons.</li>
+      <li><b>Limitations:</b> Constraints and potential validity threats.</li>
+      <li><b>Conclusion and Future Work:</b> Contributions and next steps.</li>
+      <li><b>References:</b> APIs, papers, and technical sources.</li>
+      <li><b>Appendix:</b> Optional screenshots, test cases, and sample outputs.</li>
+    </ol>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 12: Abstract Template (For Your Report)</h2>
+    <p class="small">
+      This project presents <b>TruthLens</b>, a multi-modal misinformation detection platform designed to support evidence-based claim verification.
+      The study addresses the challenge of rapidly validating online information by combining fact-check evidence retrieval,
+      source trust analysis, stance modeling, media forensics (image/video checks), and verdict aggregation in a single workflow.
+      The research follows an applied and exploratory methodology, including problem analysis, architecture design,
+      API-driven data collection, implementation, and iterative testing.
+      The developed system demonstrates practical feasibility for real-time assistance in identifying potentially misleading content.
+      Results indicate that hybrid evidence pipelines improve verification support quality while highlighting limitations related to API dependency,
+      claim ambiguity, and evolving information contexts. The work contributes an implementable framework for misinformation analysis and
+      provides a foundation for future enhancements in model robustness and multimodal verification.
+    </p>
+  </div>
+
+  <div class="slide">
+    <h2>Slide 13: Conclusion and Future Scope</h2>
+    <ul>
+      <li>TruthLens was selected through relevance-gap-feasibility analysis and delivered as a working applied research artifact.</li>
+      <li>The project combines exploratory pipeline experimentation with descriptive analysis of verification behavior.</li>
+      <li>Future scope: stronger multimodal deepfake analysis, larger benchmark datasets, and improved explainability.</li>
+    </ul>
+    <h3>Suggested Final Slide Line</h3>
+    <p><b>"TruthLens aims to make verification faster, more transparent, and evidence-driven for everyday users."</b></p>
+  </div>
+
+  <div class="slide">
+    <h2>Appendix: Quick PPT Build Guide (10-12 Minutes)</h2>
+    <ol>
+      <li>Create 13 slides using the titles above.</li>
+      <li>Keep each slide to 4-6 bullets max.</li>
+      <li>Add one architecture diagram (frontend -> backend -> APIs -> verdict).</li>
+      <li>Add one media-forensics diagram (image checks + video frame checks).</li>
+      <li>Add one demo screenshot from your running app.</li>
+      <li>Add one results table if metrics are available.</li>
+    </ol>
+  </div>
+
+</body>
+</html>

@@ -1,0 +1,61 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    body {
+        background-color: #09090b;
+        color: #fafafa;
+    }
+}
+
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Fallback for components managed dynamically by popup.js */
+.text-danger {
+    color: #ef4444 !important;
+}
+
+.text-success {
+    color: #10b981 !important;
+}
+
+.text-warning {
+    color: #eab308 !important;
+}
+
+.text-primary {
+    color: #14b8a6 !important;
+}
+
+.bg-danger\/10 {
+    background-color: rgba(239, 68, 68, 0.1) !important;
+}
+
+.bg-success\/10 {
+    background-color: rgba(16, 185, 129, 0.1) !important;
+}
+
+.border-danger\/20 {
+    border-color: rgba(239, 68, 68, 0.2) !important;
+}
+
+.border-success\/20 {
+    border-color: rgba(16, 185, 129, 0.2) !important;
+}
