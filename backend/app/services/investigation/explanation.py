@@ -32,7 +32,7 @@ class ExplanationService:
         if gemini_key and "placeholder" not in gemini_key.lower() and not gemini_key.startswith("your_"):
             try:
                 genai.configure(api_key=gemini_key)
-                self.client = genai.GenerativeModel('gemini-1.5-flash')
+                self.client = genai.GenerativeModel('gemini-2.5-flash')
                 self.provider = "gemini"
                 print("✅ Explanation Service: Connected to Gemini Pro")
             except Exception as e:
@@ -210,7 +210,7 @@ class ExplanationService:
             
             # Re-initialize specific model for vision if needed, or stick to current if it's 1.5-flash.
             # Safety check: simplistic approach
-            model = genai.GenerativeModel('gemini-1.5-flash') 
+            model = genai.GenerativeModel('gemini-2.5-flash') 
             response = await model.generate_content_async([prompt, image])
             return self._clean_output(response.text)
             
