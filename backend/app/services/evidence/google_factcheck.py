@@ -13,7 +13,14 @@ class GoogleFactCheck:
     API_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
     
     def __init__(self, api_key: Optional[str] = None):
-        self.api_key = api_key or settings.gemini_api_key  # Try to reuse Gemini key if Google Cloud project has both enabled
+        # Use the dedicated Google Fact Check Tools API key. Fall back to the
+        # Gemini key only if the dedicated one is absent (same Google Cloud
+        # project may have both APIs enabled).
+        self.api_key = (
+            api_key
+            or settings.google_factcheck_api_key
+            or settings.gemini_api_key
+        )
         
     async def search(self, query: str) -> List[dict]:
         """Search for fact checks matching the query."""

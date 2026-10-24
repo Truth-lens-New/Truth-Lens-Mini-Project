@@ -8,8 +8,17 @@ Phase 2A: Fast local lookup for common false claims.
 import json
 import re
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
+
+# Tokens that flip the polarity of a claim when they appear OUTSIDE the
+# matched misinfo pattern spans (e.g. "Vaccines DO NOT cause autism" is the
+# opposite of the stored falsehood "vaccines cause autism").
+_NEGATION_PATTERN = re.compile(
+    r"\b(?:not|no|never|none|nobody|nothing|neither|nor|cannot|without|"
+    r"isn'?t|wasn'?t|aren'?t|weren'?t|don'?t|doesn'?t|didn'?t|won'?t|"
+    r"can'?t|couldn'?t|shouldn'?t|wouldn'?t)\b"
+)
 
 
 @dataclass
@@ -75,10 +84,10 @@ class KnownMisinfoChecker:
     def check(self, claim_text: str) -> Optional[MisinfoMatch]:
         """
         Check if claim matches known misinformation.
-        
+
         Args:
             claim_text: The claim to check
-            
+
         Returns:
             MisinfoMatch if found, None otherwise
         """
@@ -89,6 +98,13 @@ class KnownMisinfoChecker:
             
             # Check if all patterns are present in the claim
             if self._matches_patterns(claim_lower, patterns):
+                # Polarity guard: an explicitly negated version of the stored
+                # falsehood ("Vaccines DO NOT cause autism") must NOT be
+                # labelled false. Skip entries whose negation does not come
+                # from the stored pattern itself.
+                if self._negation_contradicts(claim_lower, patterns):
+                    continue
+                
                 return MisinfoMatch(
                     matched=True,
                     claim_id=claim_id,
@@ -100,6 +116,40 @@ class KnownMisinfoChecker:
                 )
         
         return None
+    
+    @staticmethod
+    def _negation_contradicts(text: str, patterns: List[str]) -> bool:
+        """
+        True when any negation token in the claim lies OUTSIDE every matched
+        pattern span. The negation then flips the claim away from the stored
+        falsehood, so the entry must not be auto-matched.
+
+        Entries whose own patterns legitimately contain negation (e.g. the
+        pattern "no evidence of fraud") keep working: the negation occurs
+        inside a matched span and is therefore not a contradiction.
+        """
+        if not _NEGATION_PATTERN.search(text):
+            return False  # No negation present: polarity matches by definition.
+
+        # Collect the character spans actually matched by the patterns.
+        spans: List[Tuple[int, int]] = []
+        for pattern in patterns:
+            normalized = pattern.lower().strip()
+            if not normalized:
+                continue
+            start = 0
+            while True:
+                index = text.find(normalized, start)
+                if index == -1:
+                    break
+                spans.append((index, index + len(normalized)))
+                start = index + 1
+
+        for match in _NEGATION_PATTERN.finditer(text):
+            inside_any = any(start <= match.start() < end for start, end in spans)
+            if not inside_any:
+                return True
+        return False
     
     def _matches_patterns(self, text: str, patterns: List[str]) -> bool:
         """

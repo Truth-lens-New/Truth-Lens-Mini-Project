@@ -41,6 +41,9 @@ class Verdict(str, Enum):
     UNVERIFIED = "unverified"
     INSUFFICIENT_EVIDENCE = "insufficient_evidence"
     NOT_CHECKABLE = "not_checkable"
+    # Breaking-news strategy: sources report it, facts are still in flux.
+    # Consumed consistently by the API and the client (api.ts, InvestigationPage).
+    DEVELOPING = "developing"
 
 
 # Source type weights for evidence synthesis

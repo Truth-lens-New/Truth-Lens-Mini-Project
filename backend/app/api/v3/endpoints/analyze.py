@@ -5,9 +5,10 @@ Phase 1: Extract claims, type them, return with pending status.
 """
 
 import time
+import asyncio
 from datetime import datetime
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import List, Optional
 
 from app.models.domain import InputType, ClaimType
@@ -24,7 +25,46 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.security import get_current_user
+from app.core.config import settings
+from app.core.rate_limit import SlidingWindowLimiter
 from app.models.check import Check
+
+
+# Input size limits: characters of `content` per input_type.
+# Images carry base64 payloads and need a much larger ceiling than text.
+MAX_TEXT_CHARS = 20_000       # pasted claims/articles (audit recommendation)
+MAX_URL_CHARS = 2_048         # the URL string itself
+MAX_IMAGE_CHARS = 15_000_000  # ~11 MB binary once base64-decoded
+
+INPUT_CHAR_LIMITS = {
+    "text": MAX_TEXT_CHARS,
+    "url": MAX_URL_CHARS,
+    "social": MAX_TEXT_CHARS,
+    "image": MAX_IMAGE_CHARS,
+}
+
+
+def _validate_content_size(content: str, input_type: str) -> None:
+    """Raise a ValueError when content exceeds the limit for its input type."""
+    if not content:
+        return
+    limit = INPUT_CHAR_LIMITS.get((input_type or "text").lower(), MAX_TEXT_CHARS)
+    if len(content) > limit:
+        kind = "base64 image" if (input_type or "").lower() == "image" else "text"
+        raise ValueError(
+            f"{kind} too large for input_type '{input_type}': "
+            f"{len(content)} characters (limit {limit})"
+        )
+
+
+# Rate limiter for the expensive investigate endpoint (per user).
+investigation_limiter = SlidingWindowLimiter(
+    max_events=settings.max_investigation_rate,
+    window_seconds=settings.rate_window_seconds,
+)
+
+# Global cap on simultaneously running deep investigations (CPU-bound BART).
+investigation_semaphore = asyncio.Semaphore(settings.max_concurrent_investigations)
 
 
 router = APIRouter()
@@ -48,6 +88,11 @@ class AnalyzeRequestV3(BaseModel):
         default=None,
         description="Optional processing options"
     )
+
+    @model_validator(mode="after")
+    def check_content_size(self):
+        _validate_content_size(self.content, self.input_type)
+        return self
     
     class Config:
         json_schema_extra = {
@@ -109,7 +154,10 @@ def get_services():
 # ============ Endpoints ============
 
 @router.post("/analyze", response_model=AnalyzeResponseV3)
-def analyze_content(request: AnalyzeRequestV3):
+def analyze_content(
+    request: AnalyzeRequestV3,
+    current_user: dict = Depends(get_current_user),
+):
     """
     Analyze content for claims (Phase 1).
     
@@ -117,6 +165,7 @@ def analyze_content(request: AnalyzeRequestV3):
     - Types each claim
     - Returns with pending status (no verdict yet)
     
+    Requires authentication: it spins up the spaCy/BART models.
     This is the honest Phase 1 skeleton - we tell users what we found
     and what we WOULD check, but don't fake any verdicts.
     """
@@ -218,9 +267,13 @@ class InvestigateRequestV3(BaseModel):
     content: str = Field(
         ...,
         min_length=1,
-        max_length=10000000,
         description="The content to analyze and investigate"
     )
+    
+    @model_validator(mode="after")
+    def check_content_size(self):
+        _validate_content_size(self.content, self.input_type)
+        return self
     
     class Config:
         json_schema_extra = {
@@ -303,11 +356,26 @@ async def investigate_content(
     - Returns verdict with evidence trail
     - SAVES result to history
     
+    Per-user rate limited and globally concurrency-capped because each
+    investigation performs live internet research and CPU-bound ML work.
     WARNING: This is slower than /analyze (~5-30 seconds per claim)
     as it performs actual internet research.
     """
     start_time = time.time()
-    
+
+    # ── Rate limiting (per user, sliding window) ─────────────────────────
+    user_key = str(current_user["user_id"])
+    if not investigation_limiter.allow(user_key):
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                "Too many investigations. Please wait before trying again "
+                f"(limit: {settings.max_investigation_rate} per "
+                f"{int(settings.rate_window_seconds)}s)."
+            ),
+            headers={"Retry-After": str(investigation_limiter.retry_after(user_key))},
+        )
+
     try:
         # Get services
         input_gateway, claim_extractor, claim_classifier = get_services()
@@ -351,9 +419,20 @@ async def investigate_content(
         # Step 3: Type claims (ML - CPU bound, run in threadpool)
         typed_claims = await run_in_threadpool(claim_classifier.classify, raw_claims)
         
-        # Step 4: Investigate each claim
-        # Step 4: Investigate each claim (PARALLEL EXECUTION)
-        import asyncio
+        # Step 4: Investigate each claim (PARALLEL EXECUTION, globally capped)
+
+        # Cap the number of claims investigated per request (defense in depth
+        # against extraction spawning dozens of live investigations).
+        if len(typed_claims) > settings.max_claims_per_investigation:
+            typed_claims = sorted(
+                typed_claims,
+                key=lambda c: (not c.is_checkable, c.type_confidence),
+                reverse=True,
+            )[: settings.max_claims_per_investigation]
+            typed_claims = sorted(
+                typed_claims,
+                key=lambda c: getattr(c, "sentence_index", 0) or 0,
+            )
 
         async def process_single_claim(typed_claim):
             # PHASE 4: Check Cache
@@ -362,8 +441,10 @@ async def investigate_content(
             if cached_result:
                 result = cached_result
             else:
-                # PHASE 2B: Fully Async - Non-blocking on event loop
-                result = await verdict_engine.verify(typed_claim)
+                # Global concurrency cap: only N deep investigations may run
+                # at once across all requests (CPU-bound BART + live searches).
+                async with investigation_semaphore:
+                    result = await verdict_engine.verify(typed_claim)
                 
                 # Update cache if meaningful result
                 if result.verdict.value != "not_checkable":

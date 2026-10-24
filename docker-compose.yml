@@ -3,6 +3,10 @@ services:
     image: postgres:15-alpine
     container_name: truthlens_db
     restart: unless-stopped
+    # NOTE: this compose file is for LOCAL DEVELOPMENT ONLY. It publishes the
+    # database and pgAdmin to the host with demo credentials. For production
+    # deployments use docker-compose.prod.yml (no published ports, no pgAdmin,
+    # and startup refuses sample secrets in ENVIRONMENT=production).
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-truthlens}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-truthlens_secret}

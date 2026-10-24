@@ -85,7 +85,7 @@ class BreakingNewsStrategy(InvestigationStrategy):
         
         if is_developing:
             return InvestigationResult(
-                verdict=Verdict.DEVELOPING,  # Need to ensure Verdict enum has this or map to UNVERIFIED
+                verdict=Verdict.DEVELOPING,  # Represented in the API + client UI
                 confidence_score=0.6,        # We are confident it IS happening, but facts are flux
                 evidence=evidence_collection,
                 reason="Multiple sources reporting, but situation is described as 'developing' or 'unconfirmed'.",

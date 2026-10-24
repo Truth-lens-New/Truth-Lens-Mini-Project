@@ -3,13 +3,31 @@ Claim Normalizer Service
 
 Normalizes claims to a canonical form using semantic embeddings.
 Enables deduplication and caching of investigation results.
+
+Safety guards (added):
+- An exact normalized-text match is always reused (cannot contradict itself).
+- A similarity match only reuses a cached result when the polarity signature
+  (negation + numbers) is IDENTICAL: "vaccines cause autism" and
+  "vaccines do not cause autism" embed very closely but must never share a
+  verdict, and "inflation fell to 3.1%" must not inherit the 4.1% verdict.
 """
 
-from typing import Optional, Dict, List, Tuple
-import numpy as np
+import hashlib
+import re
 from datetime import datetime
+from typing import Optional, Dict, List, Tuple
+
+import numpy as np
 
 from app.services.models.model_manager import get_model_manager
+
+# Negation tokens used to build the polarity signature (word boundaries).
+_NEGATION_RE = re.compile(
+    r"\b(?:not|no|never|none|nobody|nothing|neither|nor|cannot|without|"
+    r"isn'?t|wasn'?t|aren'?t|weren'?t|don'?t|doesn'?t|didn'?t|won'?t|"
+    r"can'?t|couldn'?t|shouldn'?t|wouldn'?t)\b"
+)
+
 
 class ClaimNormalizer:
     """
@@ -34,18 +52,51 @@ class ClaimNormalizer:
         # In-memory store for MVP: List of (embedding, data)
         # In production, this would be a Vector DB (pgvector)
         self.known_claims: List[Tuple[np.ndarray, Dict]] = []
-        
+
+    @staticmethod
+    def polarity_signature(text: str) -> Tuple[bool, frozenset]:
+        """
+        Build a cheap polarity signature: (has_negation, set_of_numbers).
+
+        Two claims with different signatures must never share a cached result,
+        no matter how similar their embeddings are.
+        """
+        lowered = (text or "").lower()
+        negated = bool(_NEGATION_RE.search(lowered))
+        numbers = frozenset(re.findall(r"\d+(?:\.\d+)?", lowered or ""))
+        return (negated, numbers)
+
+    @staticmethod
+    def exact_key(text: str) -> str:
+        """Normalized text key for guaranteed-exact duplicate detection."""
+        return re.sub(r"\s+", " ", (text or "").strip().lower())
+
     def normalize(self, text: str) -> Dict:
         """
         Normalize input text to canonical claim.
         Returns dict with canonical text, id (if found), and similarity score.
         """
+        cutoff_polarity = self.polarity_signature(text)
+        exact = self.exact_key(text)
+
         # 1. Get embedding for input text
         embedding = self.models.get_embedding(text)
-        
-        # 2. Search for existing similar claim
-        match = self._find_best_match(embedding)
-        
+
+        # 2. Search for existing claim:
+        #    a) exact normalized-text match (always safe to reuse)
+        #    b) semantic match, guarded by an identical polarity signature
+        match = self._find_exact_match(exact)
+        if match is None:
+            semantic_match = self._find_best_match(embedding)
+            if semantic_match is not None:
+                canonical_data, score = semantic_match
+                if self.polarity_signature(canonical_data["text"]) == cutoff_polarity:
+                    match = semantic_match
+                else:
+                    # Contradictory wording (negation flips) or materially
+                    # different numbers: treat as a NEW claim, never reuse.
+                    match = None
+
         if match:
             canonical_data, score = match
             return {
@@ -59,14 +110,15 @@ class ClaimNormalizer:
         
         # 3. If no match, this is a new canonical claim
         # Generate a simple ID (hash of text for MVP)
-        import hashlib
         claim_id = hashlib.md5(text.encode()).hexdigest()
         
         new_claim_data = {
             "id": claim_id,
             "text": text,
             "created_at": datetime.now(),
-            "result": None # To be filled after investigation
+            "result": None,  # To be filled after investigation
+            "exact_key": exact,
+            "polarity": cutoff_polarity,
         }
         
         # Store it
@@ -81,13 +133,22 @@ class ClaimNormalizer:
             "cached_result": None
         }
 
-    def update_result(self, claim_id: str, result: Dict):
+    def update_result(self, claim_id: str, result) -> None:
         """Update result for a canonical claim."""
         for i, (emb, data) in enumerate(self.known_claims):
             if data["id"] == claim_id:
                 data["result"] = result
                 self.known_claims[i] = (emb, data)
                 break
+
+    def _find_exact_match(self, exact_key: str) -> Optional[Tuple[Dict, float]]:
+        """Return (data, 1.0) when a stored claim matches the exact key."""
+        if not exact_key:
+            return None
+        for _, data in self.known_claims:
+            if data.get("exact_key") == exact_key:
+                return data, 1.0
+        return None
 
     def _find_best_match(self, query_embedding: np.ndarray) -> Optional[Tuple[Dict, float]]:
         """Find best matching claim with cosine similarity."""
@@ -99,7 +160,9 @@ class ClaimNormalizer:
             dot_product = np.dot(query_embedding, stored_embedding)
             norm_q = np.linalg.norm(query_embedding)
             norm_s = np.linalg.norm(stored_embedding)
-            
+
+            if norm_q == 0 or norm_s == 0:
+                continue
             score = dot_product / (norm_q * norm_s)
             
             if score > best_score:

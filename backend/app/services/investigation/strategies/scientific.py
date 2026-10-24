@@ -123,7 +123,9 @@ class ScientificStrategy(InvestigationStrategy):
             verdict = Verdict.UNVERIFIED
             reason = "Scientific literature is inconclusive or neutral."
         elif weighted_refute > weighted_support:
-            verdict = Verdict.REFUTED
+            # Verdict.REFUTED does not exist in the enum; scientific refutation
+            # maps to the existing false verdict (Determined VERIFY semantics).
+            verdict = Verdict.VERIFIED_FALSE
             reason = f"Scientific consensus refutes this claim (Confidence: {final_confidence:.2f})."
         else:
             verdict = Verdict.VERIFIED_TRUE  # Or SUPPORTED using V3 terminology

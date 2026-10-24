@@ -7,6 +7,9 @@ from datetime import datetime
 from app.models.domain import TypedClaim, ClaimType
 from app.models.evidence import EvidenceCollection, EvidenceType, EvidenceItem, Verdict, Stance
 from app.services.evidence.known_misinfo_checker import KnownMisinfoChecker
+from app.services.evidence.ratings import (
+    normalize_rating, stance_from_rating, factcheck_is_relevant, qualifier_conflict,
+)
 from app.services.evidence.wikidata_verifier import WikidataVerifier
 from app.services.evidence.google_factcheck import GoogleFactCheck
 from app.services.investigation.strategies.factory import StrategyFactory
@@ -76,49 +79,74 @@ class InvestigationOrchestrator:
                 return evidence
                 
         # Check Google Fact Check API
+        conflicted_factchecks = []
         fact_checks = await self.google_factchecker.search(claim.text)
-        if fact_checks:
-            for fc in fact_checks[:3]: # Limit to top 3
-                review = fc.get("claimReview", [{}])[0]
-                publisher = review.get("publisher", {}).get("name", "Unknown")
-                url = review.get("url", "")
-                rating = review.get("textualRating", "Unknown")
-                
-                # Simple mapping for MVP - ideally use the helper from factcheck.py
-                stance = Stance.NEUTRAL
-                if "false" in rating.lower(): stance = Stance.REFUTES
-                elif "true" in rating.lower(): stance = Stance.SUPPORTS
-                
-                evidence.add(EvidenceItem(
-                    text=f"Fact Check by {publisher}: {rating}",
-                    source_url=url,
-                    source_domain=publisher,
-                    source_type=EvidenceType.FACT_CHECK,
-                    stance=stance,
-                    stance_confidence=0.95,
-                    trust_score=100
-                ))
-        
-        # If we found a definitive Fact Check, we might want to stop early?
-        
-        # If we found a definitive Fact Check, we might want to stop early?
-        # TruthLens philosophy: "Show me the evidence". 
+        for fc in fact_checks[:3]: # Limit to top 3
+            review = fc.get("claimReview", [{}])[0]
+            publisher = review.get("publisher", {}).get("name", "Unknown")
+            url = review.get("url", "")
+            rating = review.get("textualRating", "Unknown")
+            checked_text = fc.get("text", "") or review.get("textualRating", "")
+
+            # Relevance guard: an unrelated search match must never drive the verdict.
+            if not factcheck_is_relevant(claim.text, checked_text):
+                logger.info("Fact-check from %s is not relevant to the claim; ignoring.", publisher)
+                continue
+
+            # Tested phrase mapping ("not true" -> False, "half true" ->
+            # Misleading, ...). Unmapped/weak ratings stay NEUTRAL and can
+            # never trigger the definitive early stop below; hedged ratings
+            # ("mostly true/false") contribute at 0.80 without early-stopping.
+            stance, stance_confidence = stance_from_rating(rating)
+
+            # Temporal-qualifier guard: a professional check that supports the
+            # claim's SUBJECT but for a DIFFERENT time qualifier ("grows taller
+            # in summer" vs the claim "grows taller every year") confirms a
+            # different variant than was asked. Carry it as neutral evidence
+            # and flag the whole claim as disputed rather than a clean win.
+            conflicted_support = (
+                stance == Stance.SUPPORTS
+                and qualifier_conflict(claim.text, checked_text)
+            )
+            if conflicted_support:
+                logger.info(
+                    "Fact-check supports a different time qualifier than the claim; "
+                    "not counting as confirmed support."
+                )
+                stance, stance_confidence = Stance.NEUTRAL, 0.55
+                conflicted_factchecks.append(checked_text)
+
+            evidence.add(EvidenceItem(
+                text=f"Fact Check by {publisher}: {rating}",
+                source_url=url,
+                source_domain=publisher,
+                source_type=EvidenceType.FACT_CHECK,
+                stance=stance,
+                stance_confidence=stance_confidence,
+                trust_score=100
+            ))
+
+        # Early stop: trust a professional fact-checker ONLY when the rating is
+        # definitively True/False (SUPPORTS/REFUTES with high confidence) and relevant.
+        # TruthLens philosophy: "Show me the evidence".
         # But if a professional check exists, it's strong.
         # Let's keep going for context unless we want to save API calls.
-        # For now, we continue to Phase 2 to get "Fresh" context if possible, 
+        # For now, we continue to Phase 2 to get "Fresh" context if possible,
         # unless confidence is extremely high.
         # Logic: If we have a FACT_CHECK item with >0.9 confidence, we could stop.
         for item in evidence.items:
-            if item.source_type == EvidenceType.FACT_CHECK and item.stance_confidence > 0.9:
+            if (item.source_type == EvidenceType.FACT_CHECK
+                    and item.stance in (Stance.SUPPORTS, Stance.REFUTES)
+                    and item.stance_confidence >= 0.9):
                  logger.info("Definitive fact check found. Stopping early.")
                  # Set override verdict to match the fact check
                  if item.stance == Stance.SUPPORTS:
                      evidence.override_verdict = Verdict.VERIFIED_TRUE
                      evidence.override_reason = "Verified by professional fact-checker."
-                 elif item.stance == Stance.REFUTES:
+                 else:
                      evidence.override_verdict = Verdict.VERIFIED_FALSE
                      evidence.override_reason = "Debunked by professional fact-checker."
-                 
+
                  evidence.override_confidence = item.stance_confidence
                  self._finalize(evidence, start_time)
                  return evidence
@@ -173,6 +201,23 @@ class InvestigationOrchestrator:
         except Exception as e:
             logger.error(f"Strategy execution failed: {e}", exc_info=True)
             # We don't crash, we return partial evidence
+            
+        # Temporal-qualifier conflict: a professional fact-check confirmed a
+        # DIFFERENT time variant of the claim ("grows taller in summer" vs
+        # "grows taller every year"). Applied after strategy merge so it is
+        # the last word unless a strong refutation exists.
+        if conflicted_factchecks:
+            has_refutation = any(
+                item.stance == Stance.REFUTES for item in evidence.items
+            )
+            if not has_refutation and evidence.override_verdict != Verdict.VERIFIED_FALSE:
+                evidence.override_verdict = Verdict.DISPUTED
+                evidence.override_confidence = 0.6
+                evidence.override_reason = (
+                    "Professional fact-check confirms the core fact but for a "
+                    "different time qualifier than the claim (e.g. 'in summer' "
+                    "vs 'every year'). Evidence does not confirm this exact variant."
+                )
             
         self._finalize(evidence, start_time)
         return evidence

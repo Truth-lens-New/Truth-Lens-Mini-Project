@@ -9,58 +9,11 @@ import httpx
 import google.generativeai as genai
 
 from app.core.config import settings
+from app.services.evidence.ratings import normalize_rating as _shared_normalize_rating
 
 
 # Google Fact Check API endpoint
 FACTCHECK_API_URL = "https://factchecktools.googleapis.com/v1alpha1/claims:search"
-
-
-# Rating normalization mapping - expanded with more patterns
-RATING_NORMALIZATION = {
-    # True variants
-    'true': 'True',
-    'mostly true': 'True',
-    'correct': 'True',
-    'accurate': 'True',
-    'supported': 'True',
-    'safe': 'True',
-    'confirmed': 'True',
-    'verified': 'True',
-    'factual': 'True',
-    'evidence supports': 'True',
-    
-    # False variants
-    'false': 'False',
-    'mostly false': 'False',
-    'pants on fire': 'False',
-    'incorrect': 'False',
-    'wrong': 'False',
-    'debunked': 'False',
-    'hoax': 'False',
-    'fake': 'False',
-    'unfounded': 'False',
-    'baseless': 'False',
-    'disproven': 'False',
-    
-    # Misleading variants
-    'misleading': 'Misleading',
-    'half true': 'Misleading',
-    'mixture': 'Misleading',
-    'partly false': 'Misleading',
-    'partly true': 'Misleading',
-    'out of context': 'Misleading',
-    'exaggerated': 'Misleading',
-    'distorted': 'Misleading',
-    'cherry-picked': 'Misleading',
-    
-    # Unverifiable variants
-    'unproven': 'Unverifiable',
-    'unverified': 'Unverifiable',
-    'no evidence': 'Unverifiable',
-    'needs context': 'Unverifiable',
-    'insufficient evidence': 'Unverifiable',
-    'unclear': 'Unverifiable',
-}
 
 
 async def llm_interpret_rating(rating: str, summary: str, claim: str, url: str = "", source: str = "") -> str:
@@ -124,24 +77,18 @@ Your response (one word only):"""
 
 def normalize_rating(rating: str) -> str:
     """
-    Normalize a fact-check rating to a standard format using static mapping.
-    
+    Normalize a fact-check rating using the shared, tested mapping in
+    `app.services.evidence.ratings` (word-boundary phrase matching, negation
+    aware: "not true" -> False, "half true" -> Misleading, ...).
+
     Args:
         rating: Original rating text
-        
+
     Returns:
         Normalized rating: True, False, Misleading, or Unverifiable
+        (None when the rating cannot be confidently mapped)
     """
-    if not rating:
-        return None  # Return None to signal LLM fallback needed
-    
-    rating_lower = rating.lower().strip()
-    
-    for key, value in RATING_NORMALIZATION.items():
-        if key in rating_lower:
-            return value
-    
-    return None  # Return None to signal LLM fallback needed
+    return _shared_normalize_rating(rating)
 
 
 async def search_factchecks(claim: str) -> Dict:

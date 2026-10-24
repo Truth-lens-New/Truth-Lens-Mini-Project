@@ -16,6 +16,7 @@ import { investigateClaim } from '../lib/api';
 import { NeuralStream } from './NeuralStream';
 import { HybridTruthGauge } from './HybridTruthGauge';
 import { StrategyBadge } from './StrategyBadge';
+import { ClaimTabs } from './ClaimTabs';
 
 // === Types ===
 type InvestigationStep =
@@ -402,39 +403,46 @@ function AnalysisCharts({ evidence }: { evidence: V3EvidenceItem[] }) {
 
 // Verdict display
 function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
-    const verdictStyles: Record<VerdictType, { gradient: string; icon: typeof CheckCircle2; label: string }> = {
+    const verdictStyles: Record<VerdictType, { gradient: string; tint: string; icon: typeof CheckCircle2; label: string }> = {
         verified_true: {
             gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+            tint: '#10b981',
             icon: CheckCircle2,
             label: 'VERIFIED TRUE'
         },
         verified_false: {
             gradient: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+            tint: '#ef4444',
             icon: XCircle,
             label: 'VERIFIED FALSE'
         },
         disputed: {
             gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 50%, #6366f1 100%)', // Split orange/indigo to show polarization
+            tint: '#f59e0b',
             icon: AlertTriangle,
             label: 'DISPUTED TOPIC'
         },
         unverified: {
             gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+            tint: '#6b7280',
             icon: AlertCircle,
             label: 'UNVERIFIED'
         },
         insufficient_evidence: {
             gradient: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)',
+            tint: '#eab308',
             icon: AlertCircle,
             label: 'INSUFFICIENT EVIDENCE'
         },
         not_checkable: {
             gradient: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+            tint: '#6b7280',
             icon: AlertCircle,
             label: 'NOT CHECKABLE'
         },
         developing: {
             gradient: 'linear-gradient(135deg, #f97316 0%, #dc2626 100%)',
+            tint: '#f97316',
             icon: Zap, // Activity/Zap for breaking news
             label: 'DEVELOPING STORY'
         },
@@ -455,9 +463,17 @@ function VerdictDisplay({ claim }: { claim: V3VerifiedClaim }) {
                 <div className="absolute inset-0 opacity-20 bg-background mix-blend-overlay" />
 
                 <div className="relative bg-background/95 rounded-[2.5rem] p-8 md:p-12 overflow-hidden border border-border/20 shadow-2xl">
+                    {/* Verdict-matched background wash (theme-aware pass comes later) */}
+                    <div
+                        className="absolute inset-0 pointer-events-none"
+                        style={{
+                            background: `linear-gradient(180deg, ${v.tint}1F 0%, ${v.tint}14 30%, ${v.tint}0A 55%, transparent 75%)`,
+                        }}
+                    />
+
                     {/* Background glow for verdict */}
                     <div
-                        className="absolute -top-32 -right-32 w-96 h-96 rounded-full opacity-20 blur-[100px]"
+                        className="absolute -top-32 -right-32 w-[28rem] h-[28rem] rounded-full opacity-30 blur-[100px]"
                         style={{ background: v.gradient }}
                     />
 
@@ -1125,6 +1141,13 @@ export function InvestigationPage() {
                                     New Search
                                 </button>
                             </div>
+
+                            {/* Claim switcher: shows every claim that was investigated */}
+                            <ClaimTabs
+                                claims={verifiedClaims}
+                                activeIndex={activeClaimIndex}
+                                onSelect={setActiveClaimIndex}
+                            />
 
                             {/* Verdict Display */}
                             {primaryClaim.verdict === 'not_checkable' ? (

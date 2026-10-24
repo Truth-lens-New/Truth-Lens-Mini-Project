@@ -9,10 +9,11 @@ Handles inbound WhatsApp messages asynchronously to avoid 15s Twilio timeouts.
 """
 
 import httpx
-from fastapi import APIRouter, Form, Request, Response, BackgroundTasks
+from fastapi import APIRouter, Request, Response, BackgroundTasks, HTTPException
 from typing import Optional
 
 from app.core.config import settings
+from app.core.twilio_guard import is_valid_twilio_signature
 from app.services.chatbot import generate_chat_response
 from app.services import (
     extract_claims,
@@ -94,18 +95,40 @@ _(Type *menu* at any time to return here)_"""
 async def whatsapp_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    Body: Optional[str] = Form(default=""),
-    NumMedia: Optional[int] = Form(default=0),
-    MediaUrl0: Optional[str] = Form(default=None),
-    MediaContentType0: Optional[str] = Form(default=None),
-    From: Optional[str] = Form(default=""),
 ):
     """
-    Twilio WhatsApp inbound webhook. Replies instantly using TwiML and 
+    Twilio WhatsApp inbound webhook. Replies instantly using TwiML and
     dispatches expensive pipelines to BackgroundTasks.
+
+    Requests are signature-validated whenever TWILIO_AUTH_TOKEN is configured.
     """
-    sender = From
-    body = (Body or "").strip()
+    post_params = dict((await request.form()).items())  # signature covers POST params
+    form = dict(post_params)
+    form.update(request.query_params)  # parsing convenience for misconfigured gateways
+
+    # ── Signature validation ─────────────────────────────────────────────
+    if settings.twilio_validate_signatures and settings.twilio_auth_token:
+        signature = request.headers.get("X-Twilio-Signature")
+        # Twilio signs the externally-visible URL; behind tunnels/proxies the
+        # public URL can differ, so allow an explicit override.
+        url_for_signature = (
+            settings.twilio_webhook_public_url.rstrip("?")
+            if settings.twilio_webhook_public_url
+            else str(request.url)
+        )
+        if not is_valid_twilio_signature(
+            auth_token=settings.twilio_auth_token,
+            url=url_for_signature,
+            params=post_params,
+            signature=signature,
+        ):
+            raise HTTPException(status_code=403, detail="Invalid Twilio signature")
+
+    body = str(form.get("Body", "") or "").strip()
+    sender = str(form.get("From", "") or "")
+    num_media = int(form.get("NumMedia", "0") or 0)
+    media_url = form.get("MediaUrl0")
+    media_content_type = form.get("MediaContentType0")
 
     # Initialize state
     if sender not in SESSION_STATE:
@@ -134,9 +157,9 @@ async def whatsapp_webhook(
             return twiml_reply("🦉 *Hoot hoot! I am Lensy!*\n\nI'm the official TruthLens support owl. Ask me anything about how to use the app, deepfake detection, or fact-checking! ✨\n\n_(Type *menu* to exit at any time)_")
         else:
             # Fallback: if they just send random media while in menu, auto-trigger deepfake
-            if NumMedia and NumMedia > 0 and MediaUrl0:
+            if num_media > 0 and media_url:
                  state["mode"] = "menu" # reset to menu for next time
-                 background_tasks.add_task(_process_image_bg, MediaUrl0, MediaContentType0 or "image/jpeg", sender)
+                 background_tasks.add_task(_process_image_bg, media_url, media_content_type or "image/jpeg", sender)
                  return twiml_reply("⏳ Thanks! Running deepfake detection on your image. This takes about 10-15 seconds...\n\n_I'll reply here as soon as the results are ready._")
             
             return twiml_reply("🤔 I didn't quite catch that.\n\n" + MENU_TEXT)
@@ -149,8 +172,8 @@ async def whatsapp_webhook(
 
     # 3. MEDIA VERIFICATION MODE
     elif state["mode"] == "media":
-        if NumMedia and NumMedia > 0 and MediaUrl0:
-            background_tasks.add_task(_process_image_bg, MediaUrl0, MediaContentType0 or "image/jpeg", sender)
+        if num_media > 0 and media_url:
+            background_tasks.add_task(_process_image_bg, media_url, media_content_type or "image/jpeg", sender)
             state["mode"] = "menu" # Return to menu after submission
             return twiml_reply("⏳ Thanks! Running deepfake detection on your image. This takes about 10-15 seconds...\n\n_I'll reply here as soon as the results are ready._")
         else:

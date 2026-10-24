@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
 from app.core.database import init_db
+from app.core.startup_checks import validate_startup_config
 from app.api.auth.auth import router as auth_router
 from app.api.v1.analyze import router as analyze_router
 from app.api.v1.history import router as history_router
@@ -21,6 +22,12 @@ from app.api.v3.router import router as v3_router  # V3 Phase 1
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan handler."""
+    # Startup: refuse insecure defaults in production
+    validate_startup_config(
+        environment=settings.environment,
+        jwt_secret_key=settings.jwt_secret_key,
+        database_url=settings.database_url,
+    )
     # Startup: Initialize database
     await init_db()
     print("Database initialized")

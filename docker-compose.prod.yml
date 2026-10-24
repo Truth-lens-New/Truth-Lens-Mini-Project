@@ -1,0 +1,71 @@
+# TruthLens — production-safe Compose file
+#
+# The root docker-compose.yml is the LOCAL DEVELOPMENT stack (published DB
+# ports, default credentials, pgAdmin). Use this file for real deployments:
+#
+#   export POSTGRES_USER=truthlens
+#   export POSTGRES_PASSWORD=<strong private password>
+#   export POSTGRES_DB=truthlens
+#   export JWT_SECRET_KEY=<long random secret>
+#   export ENVIRONMENT=production
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# The backend refuses to start with sample secrets when ENVIRONMENT=production
+# (see backend/app/core/startup_checks.py).
+#
+# Differences from the dev stack:
+#   * Postgres and pgAdmin are NOT published to the host / are omitted.
+#   * pgAdmin (default admin credentials) is intentionally not deployed.
+#   * Backend runs with ENVIRONMENT=production; sample secrets abort startup.
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: truthlens_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set a private database user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set a strong private password}
+      POSTGRES_DB: ${POSTGRES_DB:-truthlens}
+    # No host port mapping: the DB is reachable only inside the compose network.
+    expose:
+      - "5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER}" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: truthlens_backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-truthlens}
+      - ENVIRONMENT=production
+      # Required: the startup check refuses sample JWT secrets in production.
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:?set a long random JWT secret}
+      # Optional API keys / integrations (pass through if configured)
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GOOGLE_FACTCHECK_API_KEY=${GOOGLE_FACTCHECK_API_KEY:-}
+      - GNEWS_API_KEY=${GNEWS_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS:-["http://localhost:5173","http://localhost:3000"]}
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data:ro
+      - backend_cache_prod:/root/.cache
+
+volumes:
+  postgres_data:
+  backend_cache_prod:

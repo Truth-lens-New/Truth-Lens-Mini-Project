@@ -150,18 +150,22 @@ class EvidenceSynthesizer:
         # --- VETO POWER Check ---
         # If ANY authoritative source Refutes the claim, we trust it over random web snippets.
         # This prevents "Green Cheese" style myths from being "Supported" by confused blogs.
+        # NOTE: only DEFINITIVE authoritative stances (confidence >= 0.9) get
+        # veto/shortcut power. Hedged ratings ("mostly false": 0.80) fall
+        # through to weighted synthesis instead of hard-committing.
         for item in items:
             if item.source_type in authoritative_types:
-                if item.stance == Stance.REFUTES:
+                if item.stance == Stance.REFUTES and item.stance_confidence >= 0.9:
                     print(f"  [Veto] Authoritative source {item.source_domain} REFUTES this claim. Verdict: FALSE.")
                     return Verdict.VERIFIED_FALSE, max(item.stance_confidence, 0.95)
 
         # Standard authoritative check (if they Support)
         for item in items:
             if item.source_type in authoritative_types:
-                if item.stance == Stance.SUPPORTS:
-                     # If an auth source supports it, and we passed the Veto check (no auth refutes),
-                     # we can be fairly confident.
+                # If an auth source DEFINITIVELY supports it, and we passed the
+                # Veto check (no auth refutes), we can be confident. Hedged
+                # support ("mostly true" @ 0.80) does NOT shortcut the vote.
+                if item.stance == Stance.SUPPORTS and item.stance_confidence >= 0.9:
                     return Verdict.VERIFIED_TRUE, max(item.stance_confidence, 0.90)
         
         # Not enough evidence

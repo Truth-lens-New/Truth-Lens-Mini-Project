@@ -96,7 +96,8 @@ TruthLens/
 │       └── core/                # Config & database
 │
 ├── data/                        # Seed data
-├── docker-compose.yml           # Docker configuration
+├── docker-compose.yml           # Docker configuration (LOCAL DEVELOPMENT ONLY —
+                             # see docker-compose.prod.yml for production)
 ├── CONTRIBUTING.md              # Collaboration guide
 └── README.md                    # This file
 ```
