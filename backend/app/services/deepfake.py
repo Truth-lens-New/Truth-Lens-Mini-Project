@@ -275,6 +275,48 @@ class DeepfakeDetector:
         
         return {"metadata": metadata, "evidence": evidence, "risk_score": risk_score}
 
+    # =========================================================================
+    # Calibration
+    # =========================================================================
+    # models/deepfake_calibration.json (optional, produced by
+    # backend/scripts/calibrate_deepfake.py) tunes the decision boundary:
+    #   threshold   - verdict cuts at fake_prob >= threshold (argmax 0.5
+    #                 inherits any training-set class imbalance)
+    #   temperature - softmax<T> sharpness; >1 flattens overconfident scores
+    # Defaults (0.5 / 1.0) keep raw model behavior until calibration is run.
+    CALIBRATION_FILE = Path(__file__).parent.parent.parent / "models" / "deepfake_calibration.json"
+
+    @classmethod
+    def _load_calibration(cls) -> tuple:
+        """Read (threshold, temperature) from the calibration file, or defaults."""
+        threshold, temperature = 0.5, 1.0
+        try:
+            import json
+            if cls.CALIBRATION_FILE.exists():
+                with open(cls.CALIBRATION_FILE, "r", encoding="utf-8") as fh:
+                    data = json.load(fh)
+                threshold = float(data.get("threshold", 0.5))
+                temperature = float(data.get("temperature", 1.0))
+        except Exception as exc:
+            print(f"Calibration load failed ({exc}); using defaults 0.5/1.0")
+        # Sanity clamps
+        return (
+            min(0.85, max(0.15, threshold)),
+            min(4.0, max(0.2, temperature)),
+        )
+
+    def _apply_calibration(self, logits):
+        """Temperature-scale raw logits and softmax them."""
+        _, temperature = self._load_calibration()
+        if temperature != 1.0:
+            logits = logits / temperature
+        return torch.softmax(logits, dim=1)
+
+    def _verdict_at_threshold(self, fake_prob: float) -> str:
+        """FAKE when fake_prob >= calibrated threshold, else REAL."""
+        threshold, _ = self._load_calibration()
+        return "FAKE" if fake_prob >= threshold else "REAL"
+
     def _generate_heatmap(self, image_tensor, original_image):
         """Generate Grad-CAM heatmap."""
         try:
@@ -354,7 +396,7 @@ class DeepfakeDetector:
             # But only for the specific pass
             
             outputs = self.model(input_tensor)
-            probabilities = torch.softmax(outputs, dim=1)
+            probabilities = self._apply_calibration(outputs)
             
             # Get prediction
             predicted_class = torch.argmax(probabilities, dim=1).item()
@@ -363,7 +405,10 @@ class DeepfakeDetector:
             real_prob = probabilities[0][0].item()
             fake_prob = probabilities[0][1].item()
             
-            # Generate heatmap for the predicted class
+            # Generate heatmap for the predicted class (raw logits, unaffected
+            # by temperature scaling). Calibration file is re-read per
+            # prediction, so a new deepfake_calibration.json applies without
+            # a restart.
             # Zero grads first
             self.model.zero_grad()
             
@@ -374,8 +419,8 @@ class DeepfakeDetector:
             # Generate heatmap
             heatmap_b64, heatmap_data_url = self._generate_heatmap(input_tensor, image_rgb)
             
-            # Determine verdict
-            verdict = "FAKE" if predicted_class == 1 else "REAL"
+            # Determine verdict using the calibrated decision boundary
+            verdict = "FAKE" if fake_prob >= self._load_calibration()[0] else "REAL"
             
             # ============================================
             # Integrate metadata risk score with model prediction
@@ -482,14 +527,14 @@ class DeepfakeDetector:
 
         with torch.no_grad():
             outputs = self.model(tensors)
-            probabilities = torch.softmax(outputs, dim=1)
+            probabilities = self._apply_calibration(outputs)
 
         per_frame = []
         for probs in probabilities:
             real_prob = probs[0].item()
             fake_prob = probs[1].item()
             per_frame.append({
-                "verdict": "FAKE" if fake_prob > real_prob else "REAL",
+                "verdict": self._verdict_at_threshold(fake_prob),
                 "confidence": max(real_prob, fake_prob),
                 "real_probability": real_prob,
                 "fake_probability": fake_prob,
@@ -723,7 +768,7 @@ async def analyze_video_for_deepfake(video_bytes: bytes, content_type: str = "vi
         # --- Aggregate verdict: average model probabilities across frames ---
         avg_real = sum(p["real_probability"] for p in frame_predictions) / total
         avg_fake = sum(p["fake_probability"] for p in frame_predictions) / total
-        verdict = "FAKE" if avg_fake > avg_real else "REAL"
+        verdict = detector._verdict_at_threshold(avg_fake)
         confidence = avg_fake if verdict == "FAKE" else avg_real
 
         if confidence >= 0.9:
