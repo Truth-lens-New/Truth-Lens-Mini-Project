@@ -51,11 +51,28 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
   };
 
   const handleFile = (file: File) => {
-    setFile(file);
     setError(null);
+    setFile(file);
     const reader = new FileReader();
     reader.onload = (e) => {
-      setPreview(e.target?.result as string);
+      const url = e.target?.result as string;
+      setPreview(url);
+
+      // Enforce the UI's 0-30s video limit before upload (server enforces it too)
+      if (file.type.startsWith('video/')) {
+        const media = document.createElement('video');
+        media.preload = 'metadata';
+        media.onloadedmetadata = () => {
+          if (media.duration > 30) {
+            setFile(null);
+            setPreview(null);
+            setError(
+              `Video is ${media.duration.toFixed(1)}s long. Please upload a clip of 30 seconds or less.`
+            );
+          }
+        };
+        media.src = url;
+      }
     };
     reader.readAsDataURL(file);
   };

@@ -294,6 +294,13 @@ export async function investigateClaim(content: string, inputType: 'text' | 'url
 }
 // --- Media Analysis (Deepfake Detection) ---
 
+export interface FrameResult {
+    timestamp: number;
+    verdict: 'FAKE' | 'REAL';
+    real_probability: number;
+    fake_probability: number;
+}
+
 export interface MediaAnalysisResponse {
     verdict: 'FAKE' | 'REAL';
     confidence: number;
@@ -301,9 +308,11 @@ export interface MediaAnalysisResponse {
     real_probability: number;
     fake_probability: number;
     model: string;
-    metadata?: Record<string, string | boolean>;
+    metadata?: Record<string, string | boolean | number>;
     evidence?: string[];
     heatmap?: string;
+    frames_analyzed?: number;
+    frame_results?: FrameResult[];
 }
 
 export async function analyzeMedia(file: File): Promise<MediaAnalysisResponse> {

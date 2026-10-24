@@ -7,7 +7,10 @@ Uses EfficientNet-B0 model trained to detect deepfake images.
 import asyncio
 import functools
 import io
+import math
+import os
 import base64
+import tempfile
 from pathlib import Path
 from typing import Optional
 
@@ -217,79 +220,36 @@ class DeepfakeDetector:
             pass
         
         # ============================================
-        # 3. Typical AI Image Dimensions Check
+        # 3. Image Dimensions (removed as risk factor)
         # ============================================
-        ai_typical_dimensions = [
-            # Square formats (common for most AI tools)
-            (512, 512), (768, 768), (1024, 1024), (2048, 2048),
-            # SDXL and newer models
-            (1024, 1024), (896, 1152), (1152, 896),
-            (832, 1216), (1216, 832), (640, 1536), (1536, 640),
-            # Midjourney common sizes
-            (1024, 1792), (1792, 1024), (1456, 816), (816, 1456),
-            # DALL-E sizes
-            (256, 256), (512, 512), (1024, 1024),
-            # Portrait/Landscape AI ratios
-            (768, 1024), (1024, 768), (768, 1152), (1152, 768),
-            (576, 1024), (1024, 576), (640, 1024), (1024, 640)
-        ]
-        
-        current_dims = (image.width, image.height)
-        if current_dims in ai_typical_dimensions:
-            evidence.append(f"Dimensions {image.width}x{image.height} are typical for AI-generated images")
-            risk_score += 15
-            metadata['ai_typical_dimensions'] = True
-        
-        # Check for exact square aspect ratio (very common in AI)
-        if image.width == image.height and image.width >= 512:
-            if not metadata.get('ai_typical_dimensions'):
-                evidence.append(f"Perfect square dimensions ({image.width}x{image.height}) common in AI generation")
-                risk_score += 10
+        # Canvas size is no longer treated as AI evidence: dimensions like
+        # 512x512 / 1024x1024 are extremely common for normal icons, logos,
+        # crops, and screenshots, and produced overwhelming false FAKE pushes.
+        metadata['ai_typical_dimensions'] = False
+
         
         # ============================================
-        # 4. Missing Camera EXIF Analysis
+        # 4. Camera EXIF Analysis (WEAK signal)
         # ============================================
-        # Real camera photos typically have these EXIF fields
-        camera_exif_fields = {
-            'Make': 15,           # Camera manufacturer
-            'Model': 15,          # Camera model
-            'DateTime': 10,       # Capture date
-            'ExposureTime': 5,    # Shutter speed
-            'FNumber': 5,         # Aperture
-            'ISOSpeedRatings': 5, # ISO
-            'FocalLength': 5,     # Lens focal length
-            'Flash': 3,           # Flash info
-            'WhiteBalance': 3,    # White balance
-            'ExifImageWidth': 2,  # Original dimensions
-            'ExifImageHeight': 2  # Original dimensions
-        }
-        
-        missing_fields = []
-        missing_score = 0
-        for field, weight in camera_exif_fields.items():
-            if field not in exif_data:
-                missing_fields.append(field)
-                missing_score += weight
-        
-        # Calculate missing EXIF contribution to risk
-        if len(missing_fields) >= 8:
-            evidence.append(f"Missing {len(missing_fields)} camera EXIF fields - likely not from a camera")
-            risk_score += min(25, missing_score // 3)
-            metadata['missing_exif_fields'] = len(missing_fields)
-        elif len(missing_fields) >= 5:
-            evidence.append(f"Missing key camera metadata ({len(missing_fields)} fields)")
-            risk_score += min(15, missing_score // 4)
-        
-        # Specific checks for completely missing camera info
+        # Absence of camera EXIF is deliberately scored LOW: screenshots,
+        # downloads, and re-shared images lose EXIF without being
+        # AI-generated. Only positive AI indicators drive risk up.
         if not metadata.get('Make') and not metadata.get('Model'):
-            if 'No camera information' not in str(evidence):
-                evidence.append("No camera manufacturer/model found - typical for AI-generated images")
-                risk_score += 10
-        
-        if not metadata.get('DateTime'):
-            if 'No original capture date' not in str(evidence):
-                evidence.append("No original capture date found in metadata")
-                risk_score += 5
+            camera_exif_fields = (
+                'Make', 'Model', 'DateTime', 'ExposureTime', 'FNumber',
+                'ISOSpeedRatings', 'FocalLength', 'Flash', 'WhiteBalance',
+                'ExifImageWidth', 'ExifImageHeight',
+            )
+            missing_fields = [f for f in camera_exif_fields if f not in exif_data]
+            metadata['missing_exif_fields'] = len(missing_fields)
+            metadata['camera_exif_present'] = False
+            risk_score += 5
+            evidence.append(
+                f"No camera EXIF ({len(missing_fields)} fields missing) - "
+                f"common for screenshots and downloads, weak AI signal only"
+            )
+        else:
+            metadata['camera_exif_present'] = True
         
         # ============================================  
         # 5. Additional Suspicious Patterns
@@ -444,11 +404,10 @@ class DeepfakeDetector:
             if verdict == "REAL" and metadata_risk >= 70:
                 evidence.insert(0, "⚠️ Warning: Model predicts REAL but metadata shows strong AI indicators")
             
-            # If model is uncertain (low confidence) and metadata risk is high, lean toward FAKE
-            if confidence < 0.6 and metadata_risk >= 50:
-                if adjusted_fake_prob > real_prob:
-                    verdict = "FAKE"
-                    evidence.insert(0, "Combined analysis (model + metadata) suggests manipulation")
+            # If model is uncertain but metadata shows strong AI indicators,
+            # the model's verdict STANDS — metadata no longer flips FAKE.
+            # (Previously: confidence < 0.6 and metadata_risk >= 50 flipped
+            # the verdict, pushing every EXIF-less screenshot to FAKE.)
             
             # Add model-based evidence
             if verdict == "FAKE":
@@ -500,6 +459,42 @@ class DeepfakeDetector:
         """
         with open(file_path, 'rb') as f:
             return self.predict(f.read())
+
+    def _predict_frames(self, rgb_images: list) -> list:
+        """
+        Run the binary REAL/FAKE classifier over a batch of RGB frames.
+
+        Unlike `predict()` this path performs no still-image EXIF/metadata
+        heuristics (extracted video frames never carry camera EXIF) and no
+        Grad-CAM backward pass — pure model probabilities.
+
+        Args:
+            rgb_images: List of PIL RGB images (decoded video frames)
+
+        Returns:
+            List of dicts with per-frame verdict and normalized probabilities
+        """
+        # Grad-CAM hooks stay registered but see no backward pass here
+        self.model.eval()
+        tensors = torch.stack(
+            [self.transform(Image.fromarray(img).convert("RGB")) for img in rgb_images]
+        ).to(self.device)
+
+        with torch.no_grad():
+            outputs = self.model(tensors)
+            probabilities = torch.softmax(outputs, dim=1)
+
+        per_frame = []
+        for probs in probabilities:
+            real_prob = probs[0].item()
+            fake_prob = probs[1].item()
+            per_frame.append({
+                "verdict": "FAKE" if fake_prob > real_prob else "REAL",
+                "confidence": max(real_prob, fake_prob),
+                "real_probability": real_prob,
+                "fake_probability": fake_prob,
+            })
+        return per_frame
 
 
 # Global detector instance (lazy loaded)
@@ -556,3 +551,219 @@ async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "im
     return await loop.run_in_executor(
         None, functools.partial(detector.predict, image_bytes)
     )
+
+
+# ==========================================================================
+# Video analysis
+# ==========================================================================
+# Videos are limited to 50 MB (enforced in the API) and MAX_VIDEO_DURATION
+# seconds (mirrors the UI's "0–30s" limit). Up to MAX_VIDEO_FRAMES evenly
+# spaced frames are sampled and classified; the clip verdict is the average
+# of the per-frame model probabilities.
+MAX_VIDEO_DURATION_SECONDS = 30
+MAX_VIDEO_FRAMES = 8
+
+
+def _fourcc_to_string(fourcc_int: int) -> str:
+    """Convert OpenCV's FOURCC integer to its four-character codec string."""
+    try:
+        return "".join(chr((int(fourcc_int) >> (8 * i)) & 0xFF) for i in range(4)).strip()
+    except Exception:
+        return ""
+
+
+def _decode_video_frames(video_bytes: bytes, max_duration: float, max_frames: int) -> tuple:
+    """
+    Decode an uploaded video and sample up to `max_frames` evenly spaced frames.
+
+    The bytes are written to a temporary file (OpenCV needs a seekable path)
+    which is always removed in `finally` — on success and on failure.
+
+    Returns:
+        (frames_bgr, timestamps, video_info) where frames are RGB arrays,
+        timestamps are the sampled frame times in seconds, and video_info
+        holds real container/file facts for the response metadata.
+
+    Raises:
+        ValueError: For empty, corrupt, undecodable, no-frame, or
+            over-duration videos (client-friendly messages).
+    """
+    if not video_bytes:
+        raise ValueError("The uploaded video is empty.")
+
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+
+        cap = cv2.VideoCapture(tmp_path)
+        if not cap.isOpened():
+            raise ValueError(
+                "Could not decode the uploaded video. The file may be corrupt "
+                "or in an unsupported format."
+            )
+
+        fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        codec = _fourcc_to_string(cap.get(cv2.CAP_PROP_FOURCC))
+
+        if not fps or not math.isfinite(fps) or fps <= 0 or frame_count <= 0:
+            cap.release()
+            raise ValueError(
+                "Could not read the video stream. The file may be corrupt "
+                "or in an unsupported format."
+            )
+        if width <= 0 or height <= 0:
+            cap.release()
+            raise ValueError(
+                "Could not read video dimensions. The file may be corrupt."
+            )
+
+        duration = frame_count / fps
+        if duration > max_duration + 1.0:  # 1s tolerance for container rounding
+            cap.release()
+            raise ValueError(
+                f"Video is {duration:.1f}s long. Maximum allowed duration is "
+                f"{max_duration:.0f} seconds."
+            )
+
+        # --- Choose evenly spaced, distinct frame indices ---
+        if frame_count <= max_frames:
+            indices = list(range(frame_count))
+        else:
+            step = (frame_count - 1) / (max_frames - 1)
+            indices = [min(int(round(i * step)), frame_count - 1) for i in range(max_frames)]
+            seen, unique = set(), []
+            for idx in indices:
+                if idx not in seen:
+                    seen.add(idx)
+                    unique.append(idx)
+            indices = unique
+
+        frames = []
+        timestamps = []
+        for idx in indices:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+            ok, frame = cap.read()
+            if not ok or frame is None:
+                continue  # skip undecodable frames (e.g. torn tail frames)
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+            timestamps.append(round(idx / fps, 2))
+        cap.release()
+
+        if not frames:
+            raise ValueError(
+                "Could not extract any frames from the uploaded video. "
+                "The file may be corrupt."
+            )
+
+        video_info = {
+            "codec": codec or "unknown",
+            "duration_seconds": round(duration, 2),
+            "resolution": f"{width}x{height}",
+            "fps": round(fps, 2),
+            "total_frames": frame_count,
+            "frames_sampled": len(frames),
+            "frame_sampling": "evenly spaced",
+        }
+        return frames, timestamps, video_info
+
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise ValueError(f"Failed to decode video: {exc}")
+    finally:
+        if tmp_path:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+
+async def analyze_video_for_deepfake(video_bytes: bytes, content_type: str = "video/mp4") -> dict:
+    """
+    Analyze an uploaded video for deepfakes by sampling evenly spaced frames
+    and running the existing binary REAL/FAKE model on them.
+
+    Sampling, decoding, and inference run in a thread pool (CPU-bound).
+    The clip result is the average of the per-frame model probabilities.
+    No Grad-CAM heatmap is produced and no still-image EXIF heuristics are
+    applied to extracted frames.
+
+    Response keeps the MediaAnalysisResponse shape and optionally adds
+    `frames_analyzed` and timestamped `frame_results`.
+
+    Raises:
+        ValueError: On invalid/undecodable/over-limit videos.
+    """
+    detector = get_deepfake_detector()
+    loop = asyncio.get_event_loop()
+
+    def _run() -> dict:
+        frames, timestamps, video_info = _decode_video_frames(
+            video_bytes,
+            max_duration=MAX_VIDEO_DURATION_SECONDS,
+            max_frames=MAX_VIDEO_FRAMES,
+        )
+        frame_predictions = detector._predict_frames(frames)
+        total = len(frame_predictions)
+
+        frame_results = []
+        for ts, pred in zip(timestamps, frame_predictions):
+            frame_results.append({
+                "timestamp": ts,
+                "verdict": pred["verdict"],
+                "real_probability": round(pred["real_probability"] * 100, 2),
+                "fake_probability": round(pred["fake_probability"] * 100, 2),
+            })
+
+        # --- Aggregate verdict: average model probabilities across frames ---
+        avg_real = sum(p["real_probability"] for p in frame_predictions) / total
+        avg_fake = sum(p["fake_probability"] for p in frame_predictions) / total
+        verdict = "FAKE" if avg_fake > avg_real else "REAL"
+        confidence = avg_fake if verdict == "FAKE" else avg_real
+
+        if confidence >= 0.9:
+            confidence_level = "high"
+        elif confidence >= 0.7:
+            confidence_level = "medium"
+        else:
+            confidence_level = "low"
+
+        fake_count = sum(1 for p in frame_predictions if p["verdict"] == "FAKE")
+        real_count = total - fake_count
+        evidence = [
+            f"Analyzed {total} evenly spaced frames across the "
+            f"{video_info['duration_seconds']}s clip ({video_info['resolution']}, "
+            f"{video_info['fps']} fps)",
+            f"Neural network detected "
+            f"{'manipulation patterns' if verdict == 'FAKE' else 'authentic patterns'} "
+            f"with {round(confidence * 100, 1)}% average frame probability",
+            f"Sampled frame verdicts: {fake_count} FAKE / {real_count} REAL",
+        ]
+        fake_probs = [p["fake_probability"] for p in frame_predictions]
+        if max(fake_probs) - min(fake_probs) > 0.25:
+            evidence.append(
+                f"Large frame-to-frame variation in FAKE probability "
+                f"({round(min(fake_probs) * 100, 1)}%–{round(max(fake_probs) * 100, 1)}%), "
+                f"interpreting individual frames together"
+            )
+
+        return {
+            "verdict": verdict,
+            "confidence": round(confidence * 100, 2),
+            "confidence_level": confidence_level,
+            "real_probability": round(avg_real * 100, 2),
+            "fake_probability": round(avg_fake * 100, 2),
+            "model": "EfficientNet-B3",
+            "metadata": video_info,
+            "evidence": evidence,
+            "heatmap": None,
+            "frames_analyzed": total,
+            "frame_results": frame_results,
+        }
+
+    return await loop.run_in_executor(None, _run)

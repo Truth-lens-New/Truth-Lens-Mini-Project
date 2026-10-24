@@ -148,6 +148,41 @@ export function ResultsBasic({ preview, onBack, analysisResult, file }: ResultsB
           </div>
         </motion.div>
 
+        {/* Sampled Frame Analysis (videos only) */}
+        {file.type.startsWith('video/') && analysisResult.frame_results && analysisResult.frame_results.length > 0 && (
+          <motion.div variants={itemVariants} className="mb-8 p-8 rounded-2xl backdrop-blur-md bg-white/60 dark:bg-white/5 border border-black/5 dark:border-white/10 shadow-sm dark:shadow-none transition-colors">
+            <h3 className="text-xl mb-2 text-gray-900 dark:text-white">Sampled Frame Analysis</h3>
+            <p className="text-sm text-gray-500 dark:text-muted-foreground mb-4">
+              {analysisResult.frames_analyzed} evenly spaced frames were classified individually; the clip verdict above is the average of their model probabilities.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {analysisResult.frame_results.map((frame, index) => {
+                const frameReal = frame.verdict === 'REAL';
+                const frameColor = frameReal ? '#00FFC3' : '#FF6B6B';
+                return (
+                  <div
+                    key={index}
+                    className="p-4 rounded-xl border"
+                    style={{ borderColor: `${frameColor}40`, backgroundColor: `${frameColor}08` }}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-xs text-gray-500 dark:text-muted-foreground">
+                        Frame @ {frame.timestamp.toFixed(2)}s
+                      </span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full" style={{ color: frameColor, backgroundColor: `${frameColor}15` }}>
+                        {frame.verdict}
+                      </span>
+                    </div>
+                    <div className="text-sm text-gray-700 dark:text-[#D6D6D6]">
+                      Real {frame.real_probability.toFixed(1)}% · Fake {frame.fake_probability.toFixed(1)}%
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </motion.div>
+        )}
+
         {/* Recommendation & Evidence */}
         <motion.div
           variants={itemVariants}

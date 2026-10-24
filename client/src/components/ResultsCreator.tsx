@@ -15,6 +15,7 @@ export function ResultsCreator({ preview, onBack, analysisResult, file }: Result
   const [showELA, setShowELA] = useState(false);
 
   const isReal = analysisResult.verdict === 'REAL';
+  const isVideo = file.type.startsWith('video/');
   const verdictColor = isReal ? '#00FFC3' : '#FF6B6B';
 
   // Dynamic model data based on actual result
@@ -63,29 +64,32 @@ export function ResultsCreator({ preview, onBack, analysisResult, file }: Result
             <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl text-foreground">Media Analysis</h2>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowHeatmap(!showHeatmap)}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showHeatmap
-                      ? 'bg-primary/20 border border-primary/50 text-primary'
-                      : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
-                      }`}
-                  >
-                    Heatmap
-                  </button>
-                  <button
-                    onClick={() => setShowELA(!showELA)}
-                    className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showELA
-                      ? 'bg-secondary/20 border border-secondary/50 text-secondary'
-                      : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
-                      }`}
-                  >
-                    ELA
-                  </button>
-                  <button className="p-1.5 rounded-lg bg-card border border-border/50 hover:bg-muted/20 text-foreground">
-                    <ZoomIn className="w-4 h-4" />
-                  </button>
-                </div>
+                {/* Heatmap/ELA overlays are image-only features */}
+                {!isVideo && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowHeatmap(!showHeatmap)}
+                      className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showHeatmap
+                        ? 'bg-primary/20 border border-primary/50 text-primary'
+                        : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
+                        }`}
+                    >
+                      Heatmap
+                    </button>
+                    <button
+                      onClick={() => setShowELA(!showELA)}
+                      className={`px-3 py-1.5 rounded-lg text-sm transition-all ${showELA
+                        ? 'bg-secondary/20 border border-secondary/50 text-secondary'
+                        : 'bg-muted/10 border border-border/20 hover:bg-muted/20 text-foreground'
+                        }`}
+                    >
+                      ELA
+                    </button>
+                    <button className="p-1.5 rounded-lg bg-card border border-border/50 hover:bg-muted/20 text-foreground">
+                      <ZoomIn className="w-4 h-4" />
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="relative rounded-xl overflow-hidden flex justify-center bg-black/20">
@@ -121,19 +125,19 @@ export function ResultsCreator({ preview, onBack, analysisResult, file }: Result
               </div>
             </div>
 
-            {/* Quick Stats */}
+            {/* Quick Stats (real values from the analysis) */}
             <div className="grid grid-cols-3 gap-4">
               <div className="p-4 rounded-xl backdrop-blur-md bg-card border border-border/50">
-                <div className="text-xs text-muted-foreground mb-1">Overall Score</div>
-                <div className="text-2xl text-primary">94.2%</div>
+                <div className="text-xs text-muted-foreground mb-1">Model Confidence</div>
+                <div className="text-2xl text-primary">{analysisResult.confidence.toFixed(1)}%</div>
               </div>
               <div className="p-4 rounded-xl backdrop-blur-md bg-card border border-border/50">
-                <div className="text-xs text-muted-foreground mb-1">Risk Level</div>
-                <div className="text-2xl text-foreground">Low</div>
+                <div className="text-xs text-muted-foreground mb-1">Fake Probability</div>
+                <div className="text-2xl text-foreground">{analysisResult.fake_probability.toFixed(1)}%</div>
               </div>
               <div className="p-4 rounded-xl backdrop-blur-md bg-card border border-border/50">
                 <div className="text-xs text-muted-foreground mb-1">Verdict</div>
-                <div className="text-2xl text-foreground">Authentic</div>
+                <div className="text-2xl text-foreground">{isReal ? 'Authentic' : 'Manipulated'}</div>
               </div>
             </div>
           </div>
@@ -185,24 +189,64 @@ export function ResultsCreator({ preview, onBack, analysisResult, file }: Result
               </div>
             </div>
 
-            {/* Anomaly Detection */}
-            <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
-              <h3 className="text-xl mb-4 text-foreground">Anomaly Detection</h3>
-              <div className="grid grid-cols-2 gap-3">
-                {anomalies.map((anomaly) => (
-                  <div
-                    key={anomaly.type}
-                    className="px-4 py-3 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="text-sm mb-0.5 text-foreground">{anomaly.type}</div>
-                      <div className="text-xs text-primary">{anomaly.status}</div>
+            {isVideo ? (
+              /* Frame-level results (videos) — real sampled-frame scores */
+              <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
+                <h3 className="text-xl mb-4 text-foreground">Sampled Frame Analysis</h3>
+                {analysisResult.frame_results && analysisResult.frame_results.length > 0 ? (
+                  <>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      {analysisResult.frames_analyzed} evenly spaced frames were classified; the clip verdict is the average of their model probabilities.
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      {analysisResult.frame_results.map((frame, index) => {
+                        const frameReal = frame.verdict === 'REAL';
+                        return (
+                          <div
+                            key={index}
+                            className={`px-4 py-3 rounded-lg border flex items-center justify-between ${frameReal
+                              ? 'bg-[#00FFC3]/10 border-[#00FFC3]/30'
+                              : 'bg-[#FF6B6B]/10 border-[#FF6B6B]/30'
+                              }`}
+                          >
+                            <div>
+                              <div className="text-sm mb-0.5 text-foreground">Frame @ {frame.timestamp.toFixed(2)}s</div>
+                              <div className="text-xs text-muted-foreground">
+                                Real {frame.real_probability.toFixed(1)}% · Fake {frame.fake_probability.toFixed(1)}%
+                              </div>
+                            </div>
+                            <span className={`text-xs font-semibold ${frameReal ? 'text-[#00FFC3]' : 'text-[#FF6B6B]'}`}>
+                              {frame.verdict}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="w-2 h-2 bg-primary rounded-full" />
-                  </div>
-                ))}
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No frame-level data available for this clip.</p>
+                )}
               </div>
-            </div>
+            ) : (
+              /* Anomaly Detection (images) */
+              <div className="p-6 rounded-2xl backdrop-blur-md bg-card border border-border/50">
+                <h3 className="text-xl mb-4 text-foreground">Anomaly Detection</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  {anomalies.map((anomaly) => (
+                    <div
+                      key={anomaly.type}
+                      className="px-4 py-3 rounded-lg bg-primary/10 border border-primary/30 flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="text-sm mb-0.5 text-foreground">{anomaly.type}</div>
+                        <div className="text-xs text-primary">{anomaly.status}</div>
+                      </div>
+                      <div className="w-2 h-2 bg-primary rounded-full" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

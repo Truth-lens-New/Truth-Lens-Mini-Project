@@ -13,27 +13,22 @@ interface ResultsProfessionalProps {
 export function ResultsProfessional({ preview, onBack, analysisResult, file }: ResultsProfessionalProps) {
   const [notes, setNotes] = useState('');
 
-  const isReal = analysisResult.verdict === 'REAL';
+  const isVideo = file.type.startsWith('video/');
 
-  // Dynamic ensemble data based on actual result
+  // Real ensemble data: the deployed pipeline is a single EfficientNet model
+  // (no battery of additional models — don't imply analysis that isn't run)
   const ensembleData = [
     { model: 'EfficientNet', score: analysisResult.confidence },
     { model: 'Real', score: analysisResult.real_probability },
     { model: 'Fake', score: analysisResult.fake_probability },
-    { model: 'Neural', score: analysisResult.confidence * 0.95 },
-    { model: 'Capsule', score: analysisResult.confidence * 0.92 },
-    { model: 'Binary', score: isReal ? analysisResult.real_probability : analysisResult.fake_probability },
   ];
 
-  const temporalData = [
-    { frame: 0, consistency: analysisResult.confidence - 2 },
-    { frame: 5, consistency: analysisResult.confidence - 1 },
-    { frame: 10, consistency: analysisResult.confidence },
-    { frame: 15, consistency: analysisResult.confidence - 2 },
-    { frame: 20, consistency: analysisResult.confidence - 1 },
-    { frame: 25, consistency: analysisResult.confidence },
-    { frame: 30, consistency: analysisResult.confidence - 1 },
-  ];
+  // Real sampled-frame data decoded from the server response (videos only)
+  const frameData = (analysisResult.frame_results || []).map((frame) => ({
+    frame: frame.timestamp,
+    fake: frame.fake_probability,
+    verdict: frame.verdict,
+  }));
 
   return (
     <div className="min-h-screen pt-20 pb-12 px-8">
@@ -99,7 +94,41 @@ export function ResultsProfessional({ preview, onBack, analysisResult, file }: R
             </div>
           </div>
 
-          {/* PRNU Camera Fingerprint */}
+          {isVideo ? (
+            /* Frame Sampling Summary (real data) — replaces PRNU camera
+               fingerprinting, which is not performed on video uploads */
+            <div className="col-span-1 p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
+              <div className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-[#00FFC3]" />
+                <h3>Frame Sampling Summary</h3>
+              </div>
+              <div className="space-y-3">
+                <div className="p-3 rounded-lg bg-[#00FFC3]/10 border border-[#00FFC3]/30">
+                  <div className="text-xs text-[#D6D6D6] mb-1">Frames Analyzed</div>
+                  <div className="text-2xl text-[#00FFC3]">{analysisResult.frames_analyzed ?? frameData.length}</div>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between">
+                    <span className="text-[#D6D6D6]">Sampling</span>
+                    <span className="text-[#00FFC3]">Evenly spaced</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#D6D6D6]">FAKE Frames</span>
+                    <span>{frameData.filter((f) => f.verdict === 'FAKE').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#D6D6D6]">REAL Frames</span>
+                    <span>{frameData.filter((f) => f.verdict === 'REAL').length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-[#D6D6D6]">Peak Fake Probability</span>
+                    <span>{frameData.length ? Math.max(...frameData.map((f) => f.fake)).toFixed(1) : '—'}%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : (
+          /* PRNU Camera Fingerprint */
           <div className="col-span-1 p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
             <div className="flex items-center gap-2 mb-3">
               <Camera className="w-4 h-4 text-[#00FFC3]" />
@@ -113,7 +142,7 @@ export function ResultsProfessional({ preview, onBack, analysisResult, file }: R
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-[#D6D6D6]">Sensor Pattern</span>
-                  <span className="text-[#00FFC3]">{file.type.startsWith('video/') ? "Frame Analysis" : "Detected"}</span>
+                  <span className="text-[#00FFC3]">Detected</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-[#D6D6D6]">Noise Consistency</span>
@@ -129,6 +158,7 @@ export function ResultsProfessional({ preview, onBack, analysisResult, file }: R
               </div>
             </div>
           </div>
+          )}
 
           {/* Multi-Model Ensemble */}
           <div className="col-span-1 p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
@@ -146,39 +176,41 @@ export function ResultsProfessional({ preview, onBack, analysisResult, file }: R
             </ResponsiveContainer>
             <div className="mt-2 text-center">
               <div className="text-xs text-[#D6D6D6] mb-1">Consensus Score</div>
-              <div className="text-2xl text-[#00FFC3]">93.2%</div>
+              <div className="text-2xl text-[#00FFC3]">{analysisResult.confidence.toFixed(1)}%</div>
             </div>
           </div>
 
-          {/* Temporal Inconsistency Timeline */}
+          {/* Frame Probability Timeline (videos, real sampled data) */}
+          {isVideo && frameData.length > 0 && (
           <div className="col-span-2 p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
             <div className="flex items-center gap-2 mb-3">
               <Clock className="w-4 h-4 text-[#99F8FF]" />
-              <h3>Temporal Inconsistency Timeline (Video)</h3>
+              <h3>Frame Probability Timeline</h3>
             </div>
             <ResponsiveContainer width="100%" height={160}>
-              <LineChart data={temporalData}>
+              <LineChart data={frameData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
-                <XAxis dataKey="frame" stroke="#666" tick={{ fontSize: 10 }} />
-                <YAxis domain={[90, 100]} stroke="#666" tick={{ fontSize: 10 }} />
-                <Line type="monotone" dataKey="consistency" stroke="#99F8FF" strokeWidth={2} dot={{ fill: '#99F8FF', r: 3 }} />
+                <XAxis dataKey="frame" stroke="#666" tick={{ fontSize: 10 }} tickFormatter={(v: number) => `${v}s`} />
+                <YAxis domain={[0, 100]} stroke="#666" tick={{ fontSize: 10 }} />
+                <Line type="monotone" dataKey="fake" stroke="#FF6B6B" strokeWidth={2} dot={{ fill: '#FF6B6B', r: 3 }} />
               </LineChart>
             </ResponsiveContainer>
             <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
               <div className="p-2 rounded bg-white/5">
-                <div className="text-[#D6D6D6]">Avg Consistency</div>
-                <div className="text-[#99F8FF]">97.3%</div>
+                <div className="text-[#D6D6D6]">Frames Analyzed</div>
+                <div className="text-[#99F8FF]">{frameData.length}</div>
               </div>
               <div className="p-2 rounded bg-white/5">
-                <div className="text-[#D6D6D6]">Frame Drops</div>
-                <div>0</div>
+                <div className="text-[#D6D6D6]">FAKE Frames</div>
+                <div>{frameData.filter((f) => f.verdict === 'FAKE').length}</div>
               </div>
               <div className="p-2 rounded bg-white/5">
-                <div className="text-[#D6D6D6]">Splice Points</div>
-                <div>0</div>
+                <div className="text-[#D6D6D6]">Avg Fake Probability</div>
+                <div>{analysisResult.fake_probability.toFixed(1)}%</div>
               </div>
             </div>
           </div>
+          )}
 
           {/* Hash & Provenance */}
           <div className="col-span-1 p-4 rounded-xl backdrop-blur-md bg-white/5 border border-white/10">
@@ -238,12 +270,14 @@ export function ResultsProfessional({ preview, onBack, analysisResult, file }: R
             <h3 className="mb-3">Advanced Metrics</h3>
             <div className="space-y-2 text-xs">
               {(file.type.startsWith('video/') ? [
-                { label: 'Video Codec', value: 'H.264', status: 'normal' },
-                { label: 'Frame Consistency', value: '98%', status: 'pass' },
-                { label: 'Audio Sync', value: 'Aligned', status: 'pass' },
-                { label: 'Bitrate Analysis', value: 'Variable', status: 'pass' },
-                { label: 'Deepfake Artifacts', value: 'None', status: 'pass' },
-                { label: 'Temporal Stability', value: 'High', status: 'pass' },
+                // Real values from the server's video metadata — no motion or
+                // audio analysis is performed, so no such metrics are shown.
+                { label: 'Video Codec', value: String(analysisResult.metadata?.['codec'] ?? 'Unknown'), status: 'normal' },
+                { label: 'Duration', value: `${analysisResult.metadata?.['duration_seconds'] ?? '—'}s`, status: 'normal' },
+                { label: 'Resolution', value: String(analysisResult.metadata?.['resolution'] ?? 'Unknown'), status: 'normal' },
+                { label: 'FPS', value: String(analysisResult.metadata?.['fps'] ?? 'Unknown'), status: 'normal' },
+                { label: 'Frames Analyzed', value: String(analysisResult.frames_analyzed ?? '—'), status: 'pass' },
+                { label: 'Frame Sampling', value: 'Evenly spaced', status: 'pass' },
               ] : [
                 { label: 'JPEG Quality', value: '95%', status: 'normal' },
                 { label: 'Double Compression', value: 'Not Detected', status: 'pass' },

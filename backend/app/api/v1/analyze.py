@@ -24,6 +24,7 @@ from app.services import (
     generate_explanation,
     llm_assess_claim,
     analyze_image_for_deepfake,
+    analyze_video_for_deepfake,
 )
 
 
@@ -300,6 +301,8 @@ class MediaAnalysisResponse(BaseModel):
     metadata: dict = Field(default={}, description="Image metadata (EXIF, format, etc.)")
     evidence: list = Field(default=[], description="Evidence points supporting the verdict")
     heatmap: Optional[str] = Field(default=None, description="Base64 encoded Grad-CAM heatmap")
+    frames_analyzed: Optional[int] = Field(default=None, description="Number of video frames analyzed (videos only)")
+    frame_results: Optional[list] = Field(default=None, description="Timestamped per-frame verdicts and probabilities (videos only)")
 
 
 @router.post("/analyze-media", response_model=MediaAnalysisResponse)
@@ -309,14 +312,17 @@ async def analyze_media(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Analyze an uploaded image for deepfake detection.
-    
-    Uses EfficientNet-B0 model trained on deepfake datasets.
-    
+    Analyze an uploaded image or video for deepfake detection.
+
+    Uses EfficientNet-B3 model trained on deepfake datasets.
+    - Images: single-frame analysis with EXIF metadata heuristics + Grad-CAM heatmap.
+    - Videos: up to 8 evenly spaced frames decoded via OpenCV, verdict averaged
+      from per-frame model probabilities (50 MB / 30 s limits apply).
+
     Args:
-        file: Image file (JPEG, PNG, etc.)
+        file: Image file (JPEG, PNG, WEBP) or video file (MP4, MOV, WEBM)
         current_user: Authenticated user from JWT
-        
+
     Returns:
         MediaAnalysisResponse with verdict and confidence scores
     """
@@ -327,20 +333,23 @@ async def analyze_media(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"
         )
-    
+
     # Read file contents
     try:
         contents = await file.read()
-        
+
         # Check file size (max 50MB for video)
         if len(contents) > 50 * 1024 * 1024:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="File too large. Maximum size is 50MB."
             )
-        
-        # Run deepfake detection
-        result = await analyze_image_for_deepfake(contents, content_type=file.content_type)
+
+        # Route images and videos through separate paths
+        if file.content_type.startswith("video/"):
+            result = await analyze_video_for_deepfake(contents, content_type=file.content_type)
+        else:
+            result = await analyze_image_for_deepfake(contents, content_type=file.content_type)
         
         # Save to history
         try:
@@ -361,8 +370,13 @@ async def analyze_media(
             # Don't fail the request just because history save failed
             
         return MediaAnalysisResponse(**result)
-        
+
+    except HTTPException:
+        # Validation errors (bad type, over-size) must keep their status codes
+        # instead of being wrapped into a generic 500 below.
+        raise
     except ValueError as e:
+        # Video/image processing errors carry client-friendly messages
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e)
