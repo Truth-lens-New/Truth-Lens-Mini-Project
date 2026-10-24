@@ -5,6 +5,8 @@ Uses RoBERTa-large-mnli to determine if a piece of evidence
 SUPPORTS, REFUTES, or is NEUTRAL towards a claim.
 """
 
+import re
+
 from app.services.models.model_manager import get_model_manager
 
 class StanceDetector:
@@ -20,6 +22,47 @@ class StanceDetector:
 
     def __init__(self):
         self.manager = get_model_manager()
+
+    # --- Heuristic Guardrail #2 helpers: comparative entity swap ---
+    # Extracts the subject of "X is/are the larger/taller/..." assertions.
+    # Pronoun subjects are skipped (they can't be compared across texts).
+    _COMPARATIVE_RE = re.compile(
+        r"\b([A-Za-z]+)\s+(?:is|are|was|were)\s+(?:the\s+)?"
+        r"(?:larger|largest|bigger|biggest|smaller|smallest|taller|tallest|shorter|shortest|"
+        r"older|oldest|newer|newest|faster|fastest|slower|slowest|heavier|heaviest|lighter|lightest|"
+        r"closer|closest|nearer|nearest|farther|farthest|further|furthest|brighter|brightest|"
+        r"stronger|strongest|longer|longest|deeper|deepest|hotter|hottest|colder|coldest)\b",
+        re.IGNORECASE,
+    )
+    _PRONOUN_SUBJECTS = {
+        "it", "this", "that", "these", "those", "which", "there", "one",
+        "they", "he", "she", "we", "you", "who", "what",
+    }
+
+    @classmethod
+    def _comparative_entities(cls, text: str) -> set:
+        """Return lowercased subjects of comparative assertions in `text`."""
+        subjects = set()
+        for match in cls._COMPARATIVE_RE.finditer(text):
+            subject = match.group(1).lower()
+            if subject not in cls._PRONOUN_SUBJECTS:
+                subjects.add(subject)
+        return subjects
+
+    @classmethod
+    def _comparative_swap(cls, claim_text: str, evidence_text: str) -> bool:
+        """
+        True when claim and evidence attribute the same comparative/superlative
+        to different entities, e.g. claim "Deimos is the larger one" vs evidence
+        "Phobos is the larger of Mars' two moons". Only one entity can hold a
+        superlative, so disjoint subjects imply a contradiction.
+        """
+        claim_subjects = cls._comparative_entities(claim_text)
+        evidence_subjects = cls._comparative_entities(evidence_text)
+        if not claim_subjects or not evidence_subjects:
+            return False
+        return not (claim_subjects & evidence_subjects)
+
 
     async def detect_async(self, claim_text: str, evidence_text: str) -> dict:
         """
@@ -79,6 +122,16 @@ class StanceDetector:
                 # or it's just discussing the myth.
                 # We massively penalize support and boost refute/discuss
                 print(f"  [Guardrail] Debunk term detected. Penalizing Support.")
+                refute_score += support_score * 0.8  # Shift support to refute
+                discuss_score += support_score * 0.2
+                support_score *= 0.0  # Nuke support
+
+            # --- Heuristic Guardrail #2: Comparative entity swap ---
+            # Claim asserts "X is the larger/taller/..." while evidence attributes
+            # the same superlative to a different entity Y -> contradiction.
+            # (Zero-shot NLI models are weak on these entity swaps.)
+            if self._comparative_swap(clean_claim, evidence_text):
+                print(f"  [Guardrail] Comparative entity mismatch. Penalizing Support.")
                 refute_score += support_score * 0.8  # Shift support to refute
                 discuss_score += support_score * 0.2
                 support_score *= 0.0  # Nuke support

@@ -70,7 +70,6 @@ class EvidenceSynthesizer:
             # Or just check everything? 
             # Strategy: If stance is NEUTRAL/Unset, check it.
             # If it came from a source that explicitly sets stance (like FactCheck), keep it.
-            # If it came from a source that explicitly sets stance (like FactCheck), keep it.
             # CRITICAL FIX: Do NOT re-evaluate Official Records. Trust the strategy logic.
             if item.source_type == EvidenceType.OFFICIAL_RECORD:
                 continue
@@ -89,7 +88,6 @@ class EvidenceSynthesizer:
         # Let's check EvidenceCollection model. Assuming it's properties.
         # But we need to ensure item.source_trust_score is set.
         
-        # Re-calc trust scores just in case
         # Re-calc trust scores just in case
         for item in evidence.items:
              if item.trust_score == 0:
