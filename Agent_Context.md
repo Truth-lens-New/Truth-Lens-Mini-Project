@@ -94,3 +94,17 @@ pm ci --no-audit --no-fund ensuring consistent, repeatable image builds across d
      - Added robust video MIME and extension detection for `<video>` rendering and UI indicators.
 - **Context**: 
   User requested to compare text verification between `uday` and `origin/shivam` to explain why the friend's PC takes less time, optimize text verification without altering the backend image/video pipeline, and resolve the frontend blocking video file uploads.
+
+
+### [2026-10-26] Video Pipeline Keyframe SynthID Screening Architecture
+- **Decision**:
+  1. Updated `DeepfakeDetector.predict` in `backend/app/services/deepfake.py` with a `check_gemini: bool = True` parameter.
+  2. Implemented `DeepfakeDetector.analyze_video(video_bytes, n_frames=8)` with the following pipeline rule:
+     - Sample $N$ evenly spaced keyframes across the video using OpenCV.
+     - **Only ONE frame** (Keyframe 0) is sent to Gemini to check SynthID watermarking (`check_gemini=True`).
+     - If Gemini flags SynthID, immediately early-exit with 100% confidence FAKE (`Google Gemini AI Detector (SynthID)`).
+     - If no SynthID watermark is found on that keyframe, Keyframe 0 completes inference on the local model and **ALL other frames** bypass Gemini completely (`check_gemini=False`), running directly through the local `EfficientNet-B3` + Grad-CAM + MultiPatch fusion pipeline.
+     - Frame predictions and evidence are aggregated into a unified video forensic report.
+  3. Updated `analyze_image_for_deepfake` to route video MIME types (`video/mp4`, `video/quicktime`, `video/webm`, `video/avi`, `video/*`) to `detector.analyze_video`.
+- **Context**: 
+  User requested that for videos taking multiple frames, all frames should not go to Gemini; only ONE frame must go to Gemini to check SynthID, and all the remaining frames must go directly to our local model. This eliminates rate limits, reduces API quota consumption by ~88%, and prevents multi-second network roundtrips.

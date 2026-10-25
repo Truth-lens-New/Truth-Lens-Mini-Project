@@ -8,6 +8,9 @@ import asyncio
 import functools
 import io
 import base64
+import os
+import tempfile
+import hashlib
 from pathlib import Path
 from typing import Optional
 
@@ -556,38 +559,42 @@ class DeepfakeDetector:
                 
         return fused_score, fusion_method, evidence
 
-    def predict(self, image_bytes: bytes) -> dict:
+    def predict(self, image_bytes: bytes, check_gemini: bool = True) -> dict:
 
         """
         Predict if an image is real or fake.
         
         Args:
             image_bytes: Raw image bytes
+            check_gemini: Whether to run pre-flight Gemini SynthID check.
+                          Set to False for subsequent video frames so only one
+                          frame goes to Gemini and all others go to our local model.
             
         Returns:
             Dictionary with verdict, confidence, probabilities, metadata, evidence, and heatmap
         """
         try:
             # 1. First Pass: Check via Google Gemini API — highest authority
-            # If Gemini says FAKE, we trust it 100% and skip all local models
-            gemini_says_fake = self._check_gemini_synthid(image_bytes)
-            if gemini_says_fake:
-                return {
-                    "verdict": "FAKE",
-                    "confidence": 100.0,
-                    "confidence_level": "high",
-                    "real_probability": 0.0,
-                    "fake_probability": 100.0,
-                    "model": "Google Gemini AI Detector",
-                    "metadata": {},
-                    "metadata_risk_score": 100,
-                    "patch_analysis": None,
-                    "evidence": [
-                        "🔴 Google Gemini API confirmed this image is AI-generated or fake.",
-                        "Verdict is 100% — Google's AI analysis overrides all local models."
-                    ],
-                    "heatmap": None
-                }
+            # Only executed if check_gemini is True
+            if check_gemini:
+                gemini_says_fake = self._check_gemini_synthid(image_bytes)
+                if gemini_says_fake:
+                    return {
+                        "verdict": "FAKE",
+                        "confidence": 100.0,
+                        "confidence_level": "high",
+                        "real_probability": 0.0,
+                        "fake_probability": 100.0,
+                        "model": "Google Gemini AI Detector",
+                        "metadata": {},
+                        "metadata_risk_score": 100,
+                        "patch_analysis": None,
+                        "evidence": [
+                            "🔴 Google Gemini API confirmed this image is AI-generated or fake.",
+                            "Verdict is 100% — Google's AI analysis overrides all local models."
+                        ],
+                        "heatmap": None
+                    }
                 
             # 2. Proceed to standard pipeline if Gemini says FALSE
             # Load image
@@ -702,6 +709,164 @@ class DeepfakeDetector:
             print(f"Prediction error: {e}")
             raise ValueError(f"Failed to process image: {str(e)}")
     
+    def analyze_video(self, video_bytes: bytes, n_frames: int = 8) -> dict:
+        """
+        Analyze a video for deepfakes by sampling N evenly-spaced keyframes.
+
+        Architecture:
+        - Only ONE frame goes to Gemini to check SynthID.
+        - If Gemini detects SynthID on that frame, immediately return 100% FAKE.
+        - All other frames bypass Gemini and run directly on our local model.
+        - Aggregate frame verdicts, confidences, risk scores, and Grad-CAM heatmap.
+
+        Args:
+            video_bytes: Raw video file bytes
+            n_frames: Number of keyframes to sample (default 8)
+
+        Returns:
+            Aggregated result dictionary
+        """
+        suffix = ".mp4"
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(video_bytes)
+            tmp_path = tmp.name
+
+        try:
+            cap = cv2.VideoCapture(tmp_path)
+            if not cap.isOpened():
+                raise ValueError("Could not open video file — unsupported format or corrupt file.")
+
+            total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            fps = cap.get(cv2.CAP_PROP_FPS) or 25
+            duration_s = total_frames / max(fps, 1)
+
+            if total_frames < 1:
+                raise ValueError("Video has no readable frames.")
+
+            sample_count = min(n_frames, total_frames)
+            frame_indices = [
+                int(total_frames * (i + 0.5) / sample_count)
+                for i in range(sample_count)
+            ]
+
+            extracted_frames: list[bytes] = []
+            for idx in frame_indices:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
+                ret, frame = cap.read()
+                if not ret or frame is None:
+                    continue
+
+                frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(frame_rgb)
+                buf = io.BytesIO()
+                pil_img.save(buf, format="JPEG", quality=90)
+                extracted_frames.append(buf.getvalue())
+
+            cap.release()
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+
+        if not extracted_frames:
+            raise ValueError("No frames could be analyzed from the video.")
+
+        # =========================================================================
+        # 1. KEYFRAME 0: ONLY ONE frame goes to Gemini to check SynthID
+        # =========================================================================
+        frame_results = []
+        first_frame_bytes = extracted_frames[0]
+        first_result = self.predict(first_frame_bytes, check_gemini=True)
+
+        # Early exit if Gemini SynthID detected an AI watermark
+        if first_result.get("model") == "Google Gemini AI Detector":
+            return {
+                "verdict": "FAKE",
+                "confidence": 100.0,
+                "confidence_level": "high",
+                "real_probability": 0.0,
+                "fake_probability": 100.0,
+                "model": "Google Gemini AI Detector (SynthID)",
+                "metadata": {"format": "video", "frames_sampled": len(extracted_frames), "duration_s": round(duration_s, 1)},
+                "metadata_risk_score": 100,
+                "patch_analysis": None,
+                "evidence": [
+                    "🔴 Google Gemini API confirmed this video is AI-generated (SynthID watermark detected on keyframe).",
+                    f"Video analyzed: 1 keyframe screened by SynthID over {duration_s:.1f}s",
+                    "Verdict is 100% — Google SynthID analysis overrides local models."
+                ],
+                "heatmap": None
+            }
+
+        # First frame is already processed through our local model since Gemini passed
+        frame_results.append(first_result)
+
+        # =========================================================================
+        # 2. ALL OTHER FRAMES: Bypass Gemini completely and run on our local model
+        # =========================================================================
+        for subsequent_frame_bytes in extracted_frames[1:]:
+            try:
+                sub_res = self.predict(subsequent_frame_bytes, check_gemini=False)
+                frame_results.append(sub_res)
+            except Exception as e:
+                print(f"⚠️ Video frame analysis failed on local model: {e}")
+                continue
+
+        # =========================================================================
+        # 3. Aggregate results across all frames
+        # =========================================================================
+        fake_votes = sum(1 for r in frame_results if r["verdict"] == "FAKE")
+        real_votes = len(frame_results) - fake_votes
+        verdict = "FAKE" if fake_votes > real_votes else "REAL"
+
+        avg_real = sum(r["real_probability"] for r in frame_results) / len(frame_results)
+        avg_fake = sum(r["fake_probability"] for r in frame_results) / len(frame_results)
+        avg_conf = sum(r["confidence"] for r in frame_results) / len(frame_results)
+        avg_meta_risk = sum(r.get("metadata_risk_score", 0) for r in frame_results) / len(frame_results)
+
+        if avg_conf >= 75:
+            confidence_level = "high"
+        elif avg_conf >= 55:
+            confidence_level = "medium"
+        else:
+            confidence_level = "low"
+
+        # Best heatmap from a frame matching the verdict (or first available)
+        best_frame = next((r for r in frame_results if r["verdict"] == verdict and r.get("heatmap")), frame_results[0])
+        heatmap = best_frame.get("heatmap")
+
+        # Deduplicate evidence points
+        seen = set()
+        all_evidence = []
+        for r in frame_results:
+            for e in r.get("evidence", []):
+                if e not in seen:
+                    seen.add(e)
+                    all_evidence.append(e)
+
+        all_evidence.insert(0,
+            f"Video analyzed: {len(frame_results)} frames sampled over {duration_s:.1f}s "
+            f"| {fake_votes}/{len(frame_results)} frames classified as FAKE"
+        )
+        all_evidence.insert(1,
+            "Keyframe SynthID check: 1 frame evaluated with Gemini (no AI watermark); all other frames verified via local EfficientNet-B3 model."
+        )
+
+        return {
+            "verdict": verdict,
+            "confidence": round(avg_conf, 2),
+            "confidence_level": confidence_level,
+            "real_probability": round(avg_real, 2),
+            "fake_probability": round(avg_fake, 2),
+            "model": "EfficientNet-B3 + MultiPatch (Video Multi-Frame)",
+            "metadata": {"format": "video", "frames_sampled": len(frame_results), "duration_s": round(duration_s, 1)},
+            "metadata_risk_score": round(avg_meta_risk),
+            "patch_analysis": best_frame.get("patch_analysis"),
+            "evidence": all_evidence[:10],
+            "heatmap": heatmap
+        }
+
     def predict_from_file(self, file_path: str) -> dict:
         """
         Predict from a file path.
@@ -748,25 +913,31 @@ def get_deepfake_detector() -> DeepfakeDetector:
     return _detector
 
 
+VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm", "video/avi", "video/x-msvideo"}
+
+
 async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
     """
-    Async wrapper for deepfake detection.
+    Async wrapper for deepfake detection supporting both image and video.
 
-    PyTorch inference (forward + Grad-CAM backward) is CPU-bound and can
-    take several seconds. Running it directly inside an async function blocks
-    FastAPI's event loop. We offload to the default ThreadPoolExecutor instead.
+    For videos:
+    - Samples keyframes.
+    - Only ONE frame is screened by Gemini for SynthID watermarking.
+    - All other frames are processed directly by our local model.
 
-    Args:
-        image_bytes: Raw image bytes
-        content_type: MIME type — used to route image vs video
-
-    Returns:
-        Detection result dictionary
+    For images:
+    - Runs standard image inference (Gemini SynthID + local CNN/MultiPatch).
     """
     detector = get_deepfake_detector()
     loop = asyncio.get_event_loop()
 
-    # Offload CPU-intensive ML inference to a thread pool
-    return await loop.run_in_executor(
-        None, functools.partial(detector.predict, image_bytes)
-    )
+    is_video = (content_type in VIDEO_TYPES) or (bool(content_type) and content_type.startswith("video/"))
+
+    if is_video:
+        return await loop.run_in_executor(
+            None, functools.partial(detector.analyze_video, image_bytes)
+        )
+    else:
+        return await loop.run_in_executor(
+            None, functools.partial(detector.predict, image_bytes)
+        )
