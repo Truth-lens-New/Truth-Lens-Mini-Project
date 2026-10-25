@@ -1,3 +1,4 @@
+import os
 """
 TruthLens Analyze API v1
 
@@ -322,9 +323,12 @@ async def analyze_media(
     Returns:
         MediaAnalysisResponse with verdict and confidence scores
     """
-    # Validate file type
-    allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp", "video/mp4", "video/quicktime", "video/webm"]
-    if file.content_type not in allowed_types:
+    # Validate file type (by MIME type or filename extension)
+    allowed_types = ["image/jpeg", "image/png", "image/jpg", "image/webp", "video/mp4", "video/quicktime", "video/webm", "video/avi", "video/x-msvideo"]
+    allowed_exts = {".jpg", ".jpeg", ".png", ".webp", ".mp4", ".mov", ".webm", ".avi", ".mkv"}
+    ext = os.path.splitext(file.filename or "")[1].lower()
+
+    if file.content_type not in allowed_types and ext not in allowed_exts:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid file type. Allowed types: {', '.join(allowed_types)}"

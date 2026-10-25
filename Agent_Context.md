@@ -108,3 +108,12 @@ pm ci --no-audit --no-fund ensuring consistent, repeatable image builds across d
   3. Updated `analyze_image_for_deepfake` to route video MIME types (`video/mp4`, `video/quicktime`, `video/webm`, `video/avi`, `video/*`) to `detector.analyze_video`.
 - **Context**: 
   User requested that for videos taking multiple frames, all frames should not go to Gemini; only ONE frame must go to Gemini to check SynthID, and all the remaining frames must go directly to our local model. This eliminates rate limits, reduces API quota consumption by ~88%, and prevents multi-second network roundtrips.
+
+
+### [2026-10-26] Video Pipeline Deployment & Binary Magic Bytes Fix
+- **Decision**:
+  1. Added `is_video_payload` in `backend/app/services/deepfake.py` inspecting container magic bytes (`ftyp`, `moov`, `mdat`, `\x1aE\xdf\xa3`, `RIFF/AVI`) to ensure video streams are never mistakenly dispatched to `PIL.Image.open()`.
+  2. Updated `backend/app/api/v1/analyze.py` to accept valid video file extensions (`.mp4`, `.mov`, `.webm`, `.avi`, `.mkv`) alongside standard MIME types.
+  3. Restarted `truthlens_backend` container to flush stale in-memory Python bytecode and verified end-to-end with a synthetic MP4 video test (confirmed: 8 frames sampled, exactly 1 frame to Gemini, 7 frames directly to local model, zero PIL errors).
+- **Context**: 
+  The user screenshot showed `Failed to process image: cannot identify image file <_io.BytesIO object at ...>`. This happened because the backend container had started prior to the code update and was still running the previous bytecode in memory without video routing. Restarting the backend container and adding binary magic-byte detection resolved the issue.

@@ -916,6 +916,26 @@ def get_deepfake_detector() -> DeepfakeDetector:
 VIDEO_TYPES = {"video/mp4", "video/quicktime", "video/webm", "video/avi", "video/x-msvideo"}
 
 
+def is_video_payload(content_bytes: bytes, content_type: Optional[str] = None) -> bool:
+    """Reliably detect video via MIME type or binary file signatures (magic bytes)."""
+    if content_type:
+        ct = content_type.lower().strip()
+        if ct in VIDEO_TYPES or ct.startswith("video/"):
+            return True
+
+    # Magic bytes check for video containers
+    if len(content_bytes) >= 8:
+        # MP4 / MOV / M4V ('ftyp', 'moov', 'mdat', etc.)
+        if content_bytes[4:8] in (b'ftyp', b'moov', b'wide', b'mdat', b'free', b'skip'):
+            return True
+    if len(content_bytes) >= 4 and content_bytes[:4] == b'\x1aE\xdf\xa3':  # WebM / MKV
+        return True
+    if len(content_bytes) >= 12 and content_bytes[:4] == b'RIFF' and content_bytes[8:12] == b'AVI ':
+        return True
+
+    return False
+
+
 async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
     """
     Async wrapper for deepfake detection supporting both image and video.
@@ -931,7 +951,7 @@ async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "im
     detector = get_deepfake_detector()
     loop = asyncio.get_event_loop()
 
-    is_video = (content_type in VIDEO_TYPES) or (bool(content_type) and content_type.startswith("video/"))
+    is_video = is_video_payload(image_bytes, content_type)
 
     if is_video:
         return await loop.run_in_executor(
