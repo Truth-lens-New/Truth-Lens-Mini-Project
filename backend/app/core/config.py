@@ -25,9 +25,17 @@ class Settings(BaseSettings):
     
     # API Keys
     gemini_api_key: str = ""
+    gemini_model: str = "gemini-3.5-flash"
     google_factcheck_api_key: str = ""
     gnews_api_key: str = ""
     groq_api_key: str = ""
+
+    # Optional self-hosted Firecrawl instance used for current web evidence.
+    # Keep the base URL version-free (for example, https://firecrawl.example.com).
+    firecrawl_url: str = ""
+    firecrawl_api_key: str = ""
+    firecrawl_timeout_seconds: float = 20.0
+    firecrawl_max_results: int = 5
     
     # CORS
     backend_cors_origins: str = '["http://localhost:5173","http://localhost:3000"]'

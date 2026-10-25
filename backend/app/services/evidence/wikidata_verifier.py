@@ -30,6 +30,7 @@ class WikidataVerifier:
     Examples that can be verified:
     - "India's capital is Delhi" → Query P36 (capital) for Q668 (India)
     - "Modi was born in 1950" → Query P569 (birth date) for Modi entity
+    - "Donald Trump is the president of India" → Query P35 (head of state)
     
     Usage:
         verifier = WikidataVerifier()
@@ -38,6 +39,7 @@ class WikidataVerifier:
     
     WIKIDATA_ENDPOINT = "https://query.wikidata.org/sparql"
     WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+    USER_AGENT = "TruthLensApp/1.0 (contact@truthlens.com; https://truthlens.digital)"
     
     # Common Wikidata property IDs
     PROPERTIES = {
@@ -72,8 +74,8 @@ class WikidataVerifier:
         
         Args:
             entity_name: The subject (e.g., "India")
-            property_name: The property (e.g., "capital")
-            claimed_value: What the claim says (e.g., "Mumbai")
+            property_name: The property (e.g., "capital", "president")
+            claimed_value: What the claim says (e.g., "Mumbai", "Donald Trump")
         """
         # Step 1: Find entity ID
         entity_id = await self._find_entity(entity_name)
@@ -115,6 +117,12 @@ class WikidataVerifier:
         # Step 4: Compare values
         verified = self._compare_values(claimed_value, actual_value)
         
+        reason = (
+            f"Verified against Wikidata records ({actual_value})."
+            if verified
+            else f"Records show {actual_value} is the {property_name} of {entity_name}, not {claimed_value}."
+        )
+        
         return WikidataResult(
             verified=verified,
             actual_value=actual_value,
@@ -122,7 +130,7 @@ class WikidataVerifier:
             entity_id=entity_id,
             property_id=property_id,
             source=f"Wikidata {entity_id}",
-            reason="Verified against Wikidata" if verified else f"Wikidata shows: {actual_value}"
+            reason=reason
         )
     
     async def _find_entity(self, name: str) -> Optional[str]:
@@ -141,11 +149,12 @@ class WikidataVerifier:
                     self.WIKIDATA_API, 
                     params=params, 
                     timeout=self.timeout,
-                    headers={"User-Agent": "TruthLens/1.0"}
+                    headers={"User-Agent": self.USER_AGENT}
                 )
-                data = response.json()
-                if data.get("search"):
-                    return data["search"][0]["id"]
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get("search"):
+                        return data["search"][0]["id"]
         except Exception as e:
             print(f"Wikidata entity search error: {e}")
         return None
@@ -161,21 +170,18 @@ class WikidataVerifier:
         """
         
         try:
-            # Execute SPARQL query via HTTP POST
             async with httpx.AsyncClient() as client:
                 response = await client.get(
                     self.WIKIDATA_ENDPOINT,
                     params={"query": query, "format": "json"},
-                    headers={"Accept": "application/json", "User-Agent": "TruthLens/1.0"},
+                    headers={"Accept": "application/json", "User-Agent": self.USER_AGENT},
                     timeout=self.timeout
                 )
-                if response.status_code != 200:
-                    return None
-                    
-                data = response.json()
-                bindings = data.get("results", {}).get("bindings", [])
-                if bindings:
-                    return bindings[0]["valueLabel"]["value"]
+                if response.status_code == 200:
+                    data = response.json()
+                    bindings = data.get("results", {}).get("bindings", [])
+                    if bindings:
+                        return bindings[0]["valueLabel"]["value"]
         except Exception as e:
             print(f"SPARQL query error: {e}")
         return None
@@ -190,7 +196,9 @@ class WikidataVerifier:
             return True
         
         # Partial match
-        if claimed_norm in actual_norm or actual_norm in claimed_norm:
+        if len(claimed_norm) >= 4 and claimed_norm in actual_norm:
+            return True
+        if len(actual_norm) >= 4 and actual_norm in claimed_norm:
             return True
         
         # Handle variations
@@ -215,15 +223,10 @@ class WikidataVerifier:
             person = first_pm_match.group(1).strip()
             country = first_pm_match.group(2).strip()
             
-            # Custom logic for "first PM"
-            # We want to find who the first PM of the country was.
-            # Convert "India" -> Q668. Property "head of government" (P6).
             entity_id = await self._find_entity(country)
             if not entity_id:
                 return None
             
-            # SPARQL to get the first holder of P6 (Head of Govt) sorted by start time
-            # P6 is "head of government"
             query = f"""
             SELECT ?itemLabel WHERE {{
               wd:{entity_id} p:P6 ?statement.
@@ -239,7 +242,7 @@ class WikidataVerifier:
                 response = await client.get(
                     self.WIKIDATA_ENDPOINT,
                     params={"query": query, "format": "json"},
-                    headers={"Accept": "application/json", "User-Agent": "TruthLens/1.0"},
+                    headers={"Accept": "application/json", "User-Agent": self.USER_AGENT},
                     timeout=self.timeout
                 )
                 if response.status_code == 200:
@@ -247,8 +250,6 @@ class WikidataVerifier:
                     bindings = data.get("results", {}).get("bindings", [])
                     if bindings:
                         actual_first_pm = bindings[0]["itemLabel"]["value"]
-                        
-                        # Compare
                         verified = self._compare_values(person, actual_first_pm)
                         return WikidataResult(
                             verified=verified,
@@ -260,6 +261,50 @@ class WikidataVerifier:
                             reason=f"Records show {actual_first_pm} was the first Prime Minister, not {person}." if not verified else "Verified against Wikidata records."
                         )
             return None
+
+        # Pattern: "X is the president of Y" / "X is president of Y"
+        pres_match = re.search(
+            r"(.+?)\s+is\s+(?:the\s+)?president\s+of\s+(.+?)[\.\?]?$",
+            claim_text,
+            re.IGNORECASE
+        )
+        if pres_match:
+            person = pres_match.group(1).strip()
+            country = pres_match.group(2).strip()
+            return await self.verify_claim(country, "president", person)
+
+        # Pattern: "The president of Y is X"
+        pres_match2 = re.search(
+            r"(?:the\s+)?president\s+of\s+(.+?)\s+is\s+(.+?)[\.\?]?$",
+            claim_text,
+            re.IGNORECASE
+        )
+        if pres_match2:
+            country = pres_match2.group(1).strip()
+            person = pres_match2.group(2).strip()
+            return await self.verify_claim(country, "president", person)
+
+        # Pattern: "X is the prime minister of Y" (current PM)
+        pm_match = re.search(
+            r"(.+?)\s+is\s+(?:the\s+)?prime\s+minister\s+of\s+(.+?)[\.\?]?$",
+            claim_text,
+            re.IGNORECASE
+        )
+        if pm_match and "first" not in pm_match.group(0).lower():
+            person = pm_match.group(1).strip()
+            country = pm_match.group(2).strip()
+            return await self.verify_claim(country, "prime minister", person)
+
+        # Pattern: "The prime minister of Y is X"
+        pm_match2 = re.search(
+            r"(?:the\s+)?prime\s+minister\s+of\s+(.+?)\s+is\s+(.+?)[\.\?]?$",
+            claim_text,
+            re.IGNORECASE
+        )
+        if pm_match2 and "first" not in pm_match2.group(0).lower():
+            country = pm_match2.group(1).strip()
+            person = pm_match2.group(2).strip()
+            return await self.verify_claim(country, "prime minister", person)
 
         # Pattern: "X is the capital of Y"
         capital_match = re.search(
@@ -282,6 +327,28 @@ class WikidataVerifier:
             country = capital_match2.group(1).strip()
             claimed_capital = capital_match2.group(2).strip()
             return await self.verify_claim(country, "capital", claimed_capital)
+
+        # Pattern: "X is the CEO of Y"
+        ceo_match = re.search(
+            r"(.+?)\s+is\s+(?:the\s+)?ceo\s+of\s+(.+?)[\.\?]?$",
+            claim_text,
+            re.IGNORECASE
+        )
+        if ceo_match:
+            person = ceo_match.group(1).strip()
+            company = ceo_match.group(2).strip()
+            return await self.verify_claim(company, "ceo", person)
+
+        # Pattern: "The CEO of Y is X"
+        ceo_match2 = re.search(
+            r"(?:the\s+)?ceo\s+of\s+(.+?)\s+is\s+(.+?)[\.\?]?$",
+            claim_text,
+            re.IGNORECASE
+        )
+        if ceo_match2:
+            company = ceo_match2.group(1).strip()
+            person = ceo_match2.group(2).strip()
+            return await self.verify_claim(company, "ceo", person)
         
         # Simple Date check: "X born in YEAR"
         birth_match = re.search(

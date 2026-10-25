@@ -7,7 +7,8 @@ import json
 import logging
 import os
 from typing import List
-import google.generativeai as genai
+from google import genai
+from app.core.config import settings
 from app.models.domain import RawClaim
 
 logger = logging.getLogger(__name__)
@@ -19,13 +20,13 @@ class CruxExtractor:
     """
     
     def __init__(self):
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("GEMINI_API_KEY") or settings.gemini_api_key
         if not api_key:
             logger.warning("GEMINI_API_KEY not found. CruxExtractor disabled.")
             self.enabled = False
         else:
-            genai.configure(api_key=api_key)
-            self.model = genai.GenerativeModel('gemini-2.5-flash')
+            self.client = genai.Client(api_key=api_key)
+
             self.enabled = True
 
     def extract(self, text: str, max_claims: int = 7) -> List[RawClaim]:
@@ -54,7 +55,10 @@ class CruxExtractor:
         """
         
         try:
-            response = self.model.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=settings.gemini_model,
+                contents=prompt
+            )
             result_text = response.text.strip()
             
             # Clean up potential markdown code blocks

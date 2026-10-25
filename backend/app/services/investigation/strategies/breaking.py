@@ -7,7 +7,7 @@ from app.models.evidence import EvidenceCollection, EvidenceItem, Verdict, Evide
 from app.services.investigation.strategies.base import (
     InvestigationStrategy, InvestigationContext, InvestigationResult
 )
-from app.services.investigation.searchers import get_duckduckgo_searcher
+from app.services.investigation.searchers import get_web_searcher
 
 logger = logging.getLogger(__name__)
 
@@ -23,13 +23,14 @@ class BreakingNewsStrategy(InvestigationStrategy):
     }
 
     def __init__(self):
-        self.searcher = get_duckduckgo_searcher()
+        self.searcher = get_web_searcher()
         
     async def execute(self, ctx: InvestigationContext) -> InvestigationResult:
         evidence_collection = EvidenceCollection()
         
         # 1. Temporal Search (Last 24 Hours)
-        # Use duckduckgo 'd' filter
+        # Uses Firecrawl's ``qdr:d`` filter when configured, otherwise DDG's
+        # existing one-day filter.
         query = f"{ctx.claim.text} news"
         results = await self.searcher.search(query, max_results=10, time='d')
         

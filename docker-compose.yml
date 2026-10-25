@@ -12,6 +12,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/database/init:/docker-entrypoint-initdb.d:ro
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-512m}
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-truthlens}" ]
       interval: 5s
@@ -21,6 +22,7 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: truthlens_pgadmin
+    profiles: ["tools"]
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: admin@truthlens.com
@@ -31,6 +33,7 @@ services:
       - postgres
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+    mem_limit: ${PGADMIN_MEMORY_LIMIT:-384m}
 
   backend:
     build:
@@ -44,6 +47,7 @@ services:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-truthlens}:${POSTGRES_PASSWORD:-truthlens_secret}@postgres:5432/${POSTGRES_DB:-truthlens}
       - PYTHONDONTWRITEBYTECODE=1
       - PYTHONUNBUFFERED=1
+      - TOKENIZERS_PARALLELISM=false
     env_file:
       - .env
     depends_on:
@@ -52,7 +56,7 @@ services:
     volumes:
       - ./backend:/app:cached
       - ./data:/app/data:cached
-      - backend_cache:/root/.cache
+    mem_limit: ${BACKEND_MEMORY_LIMIT:-3g}
     develop:
       watch:
         - action: sync
@@ -74,12 +78,16 @@ services:
       - "5173:5173"
     environment:
       - VITE_API_URL=
-      - CHOKIDAR_USEPOLLING=true
+      # Polling increases CPU and memory use substantially on Docker Desktop.
+      # Enable it only if file changes are not detected: CHOKIDAR_USEPOLLING=true
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-false}
+      - NODE_OPTIONS=--max-old-space-size=512
     volumes:
       - ./client:/app:cached
       - /app/node_modules
     depends_on:
       - backend
+    mem_limit: ${CLIENT_MEMORY_LIMIT:-768m}
     develop:
       watch:
         - action: sync
@@ -93,13 +101,14 @@ services:
       context: ./client
       dockerfile: Dockerfile.prod
     container_name: truthlens_client_prod
+    profiles: ["production"]
     restart: unless-stopped
     ports:
       - "8080:80"
     depends_on:
       - backend
+    mem_limit: ${CLIENT_PROD_MEMORY_LIMIT:-256m}
 
 volumes:
   postgres_data:
   pgadmin_data:
-  backend_cache:

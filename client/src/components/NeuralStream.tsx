@@ -43,11 +43,12 @@ const THOUGHT_STREAMS: Record<string, string[]> = {
         "Searching PubMed for scientific consensus..."
     ],
     analyzing_stance: [
+        "Cross-referencing claims with search results...",
         "Reading source content...",
-        "Detecting bias in sources...",
+        "Analyzing evidence with neural models...",
         "Comparing conflicting reports...",
         "Weighing evidence credibility...",
-        "Identifying primary sources..."
+        "Synthesizing consensus across sources..."
     ],
     synthesizing: [
         "Synthesizing final verdict...",
@@ -97,6 +98,11 @@ export function NeuralStream({ currentStep = 'idle' }: NeuralStreamProps) {
         }
         const interval = setInterval(() => {
             setProgress(prev => {
+                // If in analyzing_stance and reached 85, slowly crawl towards 94% to show continuous activity
+                if (currentStep === 'analyzing_stance' && prev >= 85) {
+                    if (prev < 94) return Math.min(94, prev + 0.05);
+                    return prev;
+                }
                 if (prev >= target) return prev;
                 const diff = target - prev;
                 const increment = Math.max(0.1, diff * 0.1);

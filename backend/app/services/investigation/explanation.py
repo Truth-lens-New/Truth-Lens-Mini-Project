@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional
 from app.models.evidence import VerifiedClaim, EvidenceItem, Verdict
 from app.models.domain import ClaimType
 from app.core.config import settings
-import google.generativeai as genai
+from google import genai
 from groq import Groq, AsyncGroq
 import os
 
@@ -31,8 +31,8 @@ class ExplanationService:
         
         if gemini_key and "placeholder" not in gemini_key.lower() and not gemini_key.startswith("your_"):
             try:
-                genai.configure(api_key=gemini_key)
-                self.client = genai.GenerativeModel('gemini-1.5-flash')
+                self.client = genai.Client(api_key=gemini_key)
+
                 self.provider = "gemini"
                 print("✅ Explanation Service: Connected to Gemini Pro")
             except Exception as e:
@@ -64,7 +64,10 @@ class ExplanationService:
         
         try:
             if self.provider == "gemini":
-                response = await self.client.generate_content_async(prompt_text)
+                response = await self.client.aio.models.generate_content(
+                    model=settings.gemini_model,
+                    contents=prompt_text
+                )
                 return self._clean_output(response.text)
                 
             elif self.provider == "groq":
@@ -204,14 +207,17 @@ class ExplanationService:
             Keep the explanation under 80 words. Be technical but accessible.
             """
             
-            # Gemini Pro Vision call (model name might differ slightly, using auto-selection if possible or 'gemini-1.5-flash')
+            # Gemini multimodal call using configured model
             # Assuming self.client is configured. For Vision we usually need 'gemini-pro-vision'.
             # However, 'gemini-1.5-flash' handles everything.
             
             # Re-initialize specific model for vision if needed, or stick to current if it's 1.5-flash.
             # Safety check: simplistic approach
-            model = genai.GenerativeModel('gemini-1.5-flash') 
-            response = await model.generate_content_async([prompt, image])
+ 
+            response = await self.client.aio.models.generate_content(
+                model=settings.gemini_model,
+                contents=[prompt, image]
+            )
             return self._clean_output(response.text)
             
         except Exception as e:

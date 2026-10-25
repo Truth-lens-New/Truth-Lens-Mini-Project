@@ -6,7 +6,7 @@ Extracts factual claims from text using spaCy and Gemini.
 
 from typing import List, Optional
 import spacy
-import google.generativeai as genai
+from google import genai
 
 from app.core.config import settings
 
@@ -20,12 +20,12 @@ def get_nlp():
     global _nlp
     if _nlp is None:
         try:
-            _nlp = spacy.load("en_core_web_sm")
+            _nlp = spacy.load("en_core_web_sm", exclude=["tokenizer"])
         except OSError:
             # Model not installed, download it
             import subprocess
             subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-            _nlp = spacy.load("en_core_web_sm")
+            _nlp = spacy.load("en_core_web_sm", exclude=["tokenizer"])
     return _nlp
 
 
@@ -73,8 +73,8 @@ async def refine_claims(candidates: List[str]) -> List[str]:
         return candidates[:3]
     
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=settings.gemini_api_key)
+
         
         prompt = f"""Analyze the following text segments and extract 1-3 specific, verifiable factual claims.
 
@@ -90,7 +90,10 @@ Rules:
 
 Factual claims:"""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=settings.gemini_model,
+            contents=prompt
+        )
         response_text = response.text.strip()
         
         if response_text == "NO_CLAIMS":

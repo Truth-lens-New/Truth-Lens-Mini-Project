@@ -6,6 +6,7 @@ Phase 2A: Evidence gathering and investigation.
 
 from .searchers import (
     DuckDuckGoSearcher, get_duckduckgo_searcher,
+    FirecrawlSearcher, get_firecrawl_searcher, get_web_searcher,
     WikipediaSearcher, get_wikipedia_searcher
 )
 from .synthesizer import EvidenceSynthesizer, get_synthesizer
@@ -16,6 +17,9 @@ __all__ = [
     # Searchers
     "DuckDuckGoSearcher",
     "get_duckduckgo_searcher", 
+    "FirecrawlSearcher",
+    "get_firecrawl_searcher",
+    "get_web_searcher",
     "WikipediaSearcher",
     "get_wikipedia_searcher",
     # Core

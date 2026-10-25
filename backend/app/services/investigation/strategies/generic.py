@@ -6,7 +6,7 @@ from app.models.evidence import EvidenceCollection, EvidenceItem, Verdict, Evide
 from app.services.investigation.strategies.base import (
     InvestigationStrategy, InvestigationContext, InvestigationResult
 )
-from app.services.investigation.searchers import get_duckduckgo_searcher, get_wikipedia_searcher
+from app.services.investigation.searchers import get_web_searcher, get_wikipedia_searcher
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class GenericStrategy(InvestigationStrategy):
     """
     
     def __init__(self):
-        self.ddg_searcher = get_duckduckgo_searcher()
+        self.web_searcher = get_web_searcher()
         self.wiki_searcher = get_wikipedia_searcher()
         
     async def execute(self, ctx: InvestigationContext) -> InvestigationResult:
@@ -27,7 +27,7 @@ class GenericStrategy(InvestigationStrategy):
         # Parallel Execution: DDG + Wiki
         tasks = []
         
-        tasks.append(self._search_ddg(ctx.claim.text, evidence_collection))
+        tasks.append(self._search_web(ctx.claim.text, evidence_collection))
         tasks.append(self._search_wiki(ctx.claim.text, evidence_collection))
         
         await asyncio.gather(*tasks)
@@ -40,8 +40,8 @@ class GenericStrategy(InvestigationStrategy):
             strategy_stats={"sources_found": len(evidence_collection.items)}
         )
 
-    async def _search_ddg(self, query: str, evidence: EvidenceCollection):
-        results = await self.ddg_searcher.search(query, max_results=5)
+    async def _search_web(self, query: str, evidence: EvidenceCollection):
+        results = await self.web_searcher.search(query, max_results=5)
         for res in results:
             evidence.add(EvidenceItem(
                 text=res.snippet,

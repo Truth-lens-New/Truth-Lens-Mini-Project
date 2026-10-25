@@ -9,6 +9,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.domain_trust import extract_domain
+from app.services.investigation.searchers import get_web_searcher
 
 
 # GNews API endpoint
@@ -30,12 +31,7 @@ async def search_news(claim: str, max_results: int = 5) -> List[Dict]:
         return []
     
     if not settings.gnews_api_key:
-        return [{
-            'title': 'News API not configured',
-            'description': 'GNews API key is required for evidence retrieval',
-            'domain': None,
-            'url': None
-        }]
+        return await _search_with_web_provider(claim, max_results)
     
     try:
         async with httpx.AsyncClient() as client:
@@ -73,4 +69,20 @@ async def search_news(claim: str, max_results: int = 5) -> List[Dict]:
             
     except Exception as e:
         print(f"GNews API error: {e}")
-        return []
+        return await _search_with_web_provider(claim, max_results)
+
+
+async def _search_with_web_provider(claim: str, max_results: int) -> List[Dict]:
+    """Use Firecrawl (when configured) or DDG as the GNews fallback."""
+    results = await get_web_searcher().search(f"{claim} news", max_results=max_results)
+    return [
+        {
+            'title': result.title,
+            'description': result.snippet,
+            'domain': result.source_domain,
+            'url': result.url,
+            'source': result.source,
+            'published_at': ''
+        }
+        for result in results
+    ]

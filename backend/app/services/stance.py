@@ -5,7 +5,7 @@ Uses Gemini to classify the stance of evidence snippets toward a claim.
 """
 
 from typing import List, Dict
-import google.generativeai as genai
+from google import genai
 
 from app.core.config import settings
 from app.services.domain_trust import score_domain
@@ -44,8 +44,8 @@ async def classify_stance(claim: str, snippet: str) -> str:
         return 'UNRELATED'
     
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=settings.gemini_api_key)
+
         
         prompt = f"""Classify the stance of the following text snippet toward the given claim.
 
@@ -61,7 +61,10 @@ Classify as exactly one of:
 
 Respond with ONLY the classification label (SUPPORTS, REFUTES, DISCUSS, or UNRELATED):"""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=settings.gemini_model,
+            contents=prompt
+        )
         stance = response.text.strip().upper()
         
         # Validate response

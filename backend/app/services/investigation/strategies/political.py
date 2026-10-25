@@ -7,7 +7,7 @@ from app.models.evidence import EvidenceCollection, EvidenceItem, Verdict, Evide
 from app.services.investigation.strategies.base import (
     InvestigationStrategy, InvestigationContext, InvestigationResult
 )
-from app.services.investigation.searchers import get_duckduckgo_searcher
+from app.services.investigation.searchers import get_web_searcher
 from app.services.evidence.wikidata_verifier import get_wikidata_verifier
 
 logger = logging.getLogger(__name__)
@@ -42,7 +42,7 @@ class PoliticalStrategy(InvestigationStrategy):
     DOMAINS_DEFAULT = [".gov", ".gov.in", ".gov.uk"]
 
     def __init__(self):
-        self.searcher = get_duckduckgo_searcher()
+        self.searcher = get_web_searcher()
         self.wikidata_verifier = get_wikidata_verifier()
         
     def _get_target_domains(self, claim_text: str) -> List[str]:

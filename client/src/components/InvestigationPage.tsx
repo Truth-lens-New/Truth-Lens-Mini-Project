@@ -789,9 +789,11 @@ export function InvestigationPage() {
         }
 
         try {
-            // Await the actual result
-            // The UI will stay on 'analyzing_stance' (with dynamic Cycle thoughts) until this returns
-            const response = await apiPromise;
+            // Await the actual result (with a 60-second safety timeout)
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('Investigation timed out. The server took longer than expected to gather external sources. Please try again.')), 60000)
+            );
+            const response = await Promise.race([apiPromise, timeoutPromise]) as any;
 
             setCompletedSteps(prev => [...prev, 'analyzing_stance']);
 

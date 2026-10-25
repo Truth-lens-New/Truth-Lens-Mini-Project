@@ -14,7 +14,7 @@ def install_spacy():
     print("📦 Checking spaCy model...")
     try:
         import spacy
-        spacy.load("en_core_web_sm")
+        spacy.load("en_core_web_sm", exclude=["tokenizer"])
         print("   ✅ spaCy model found.")
     except OSError:
         print("   ⬇️ Downloading spaCy model...")

@@ -5,7 +5,7 @@ Uses Gemini to assess claims when traditional fact-checking yields insufficient 
 This is a fallback for obvious claims that can be verified with common knowledge.
 """
 
-import google.generativeai as genai
+from google import genai
 from app.core.config import settings
 
 
@@ -40,8 +40,8 @@ async def llm_assess_claim(claim: str) -> dict:
         }
     
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=settings.gemini_api_key)
+
         
         prompt = f"""You are a fact-checker AI. Assess the following claim based on scientific consensus and widely verified facts.
 
@@ -65,7 +65,10 @@ Examples:
 
 Now assess the claim:"""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=settings.gemini_model,
+            contents=prompt
+        )
         response_text = response.text.strip()
         
         # Parse response

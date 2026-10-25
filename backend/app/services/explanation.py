@@ -5,7 +5,7 @@ Generates user-friendly explanations using Gemini based on analysis signals.
 """
 
 from typing import Dict
-import google.generativeai as genai
+from google import genai
 
 from app.core.config import settings
 
@@ -38,8 +38,8 @@ async def generate_explanation(signals: Dict) -> str:
         return _generate_fallback_explanation(signals)
     
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=settings.gemini_api_key)
+
         
         # Build context for the LLM
         context_parts = [
@@ -84,7 +84,10 @@ Rules:
 
 Explanation:"""
 
-        response = model.generate_content(prompt)
+        response = client.models.generate_content(
+            model=settings.gemini_model,
+            contents=prompt
+        )
         return response.text.strip()
         
     except Exception as e:

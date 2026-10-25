@@ -36,6 +36,7 @@
 - **🌐 Domain Trust Scoring** - Evaluate source credibility (0-100 score)
 - **✓ Fact-Check Integration** - Google Fact Check API integration
 - **📰 Evidence Retrieval** - GNews API for corroborating sources
+- **🔥 Firecrawl Evidence Retrieval** - Optional self-hosted web search with page markdown
 - **🤖 Stance Classification** - AI-powered stance detection
 - **⚖️ Verdict Aggregation** - Intelligent verdict synthesis
 - **💬 LLM Explanations** - Human-readable analysis explanations
@@ -128,6 +129,11 @@ GEMINI_API_KEY=your_gemini_api_key
 GOOGLE_FACTCHECK_API_KEY=your_google_factcheck_key
 GNEWS_API_KEY=your_gnews_api_key
 
+# Optional: self-hosted Firecrawl. It retrieves current, readable evidence for
+# the fact-checking pipeline; leave unset to use existing search fallbacks.
+FIRECRAWL_URL=https://firecrawl.mycilo.app
+FIRECRAWL_API_KEY=
+
 # JWT
 JWT_SECRET=your_jwt_secret_key
 ```
@@ -136,6 +142,19 @@ JWT_SECRET=your_jwt_secret_key
 ```bash
 docker-compose up -d
 ```
+
+The default development stack starts PostgreSQL, the FastAPI backend, and the
+Vite client. pgAdmin and the production Nginx client are opt-in to keep local
+Docker memory use low:
+
+```bash
+docker compose --profile tools up -d       # Add pgAdmin
+docker compose --profile production up -d  # Add the production client
+```
+
+The backend is capped at 3 GB, PostgreSQL at 512 MB, and the Vite client at
+768 MB by default. Override the `*_MEMORY_LIMIT` environment variables only if
+a model cannot load.
 
 ### 4. Install Frontend Dependencies
 ```bash

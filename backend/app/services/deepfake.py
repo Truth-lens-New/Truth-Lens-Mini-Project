@@ -20,7 +20,8 @@ import timm
 from PIL import Image
 import io
 from pathlib import Path
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from app.core.config import settings
 import cv2
 import numpy as np
@@ -56,7 +57,7 @@ class DeepfakeDetector:
             
         if model_path is None:
             # Default path relative to backend directory
-            model_path = Path(__file__).parent.parent.parent / "models" / "efficientnet_b3_best.pth"
+            model_path = Path(__file__).parent.parent.parent / "models" / "efficientnet_b3_production.pth"
         
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"Deepfake detector using device: {self.device}")
@@ -473,8 +474,8 @@ class DeepfakeDetector:
             return False
 
         try:
-            genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel('gemini-3.6-flash')
+            client = genai.Client(api_key=settings.gemini_api_key)
+
 
             # Auto-detect mime type from magic bytes
             if image_bytes[:8] == b'\x89PNG\r\n\x1a\n':
@@ -486,7 +487,7 @@ class DeepfakeDetector:
 
             print(f"[SynthID] Calling Gemini API (mime={mime_type}, size={len(image_bytes)} bytes)...")
 
-            img_part = {"mime_type": mime_type, "data": image_bytes}
+            img_part = types.Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
             prompt = (
                 "Look at this image. Was it created by an AI image generator "
@@ -495,7 +496,10 @@ class DeepfakeDetector:
                 "Answer with only one word: YES or NO."
             )
 
-            response = model.generate_content([prompt, img_part])
+            response = client.models.generate_content(
+                model=settings.gemini_model,
+                contents=[prompt, img_part]
+            )
             raw_text = (response.text or "").strip()
             print(f"[SynthID] Gemini responded: '{raw_text}'")
 

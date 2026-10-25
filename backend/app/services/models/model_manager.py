@@ -15,8 +15,7 @@ class ModelManager:
     Loads all ML models once at startup, reuses everywhere.
     
     Models loaded:
-    Models loaded:
-    1. spaCy (en_core_web_sm) - NLP processing
+    1. spaCy (en_core_web_sm) - NLP processing (without tokenizer to prevent Cython int overflow)
     2. BART-large-mnli - Zero-shot classification for claim typing
     3. all-MiniLM-L6-v2 - Sentence embeddings for normalization
     """
@@ -40,15 +39,15 @@ class ModelManager:
         """Load all ML models."""
         print("🔄 Loading ML models (one-time startup)...")
         
-        # 1. spaCy for NLP
+        # 1. spaCy for NLP (exclude tokenizer to avoid Cython PreshMap uint64_t / C ssize_t overflow)
         print("  📚 Loading spaCy en_core_web_sm...")
         try:
-            self.nlp = spacy.load("en_core_web_sm")
+            self.nlp = spacy.load("en_core_web_sm", exclude=["tokenizer"])
         except OSError:
             print("  ⚠️ spaCy model not found, downloading...")
             import subprocess
             subprocess.run(["python", "-m", "spacy", "download", "en_core_web_sm"])
-            self.nlp = spacy.load("en_core_web_sm")
+            self.nlp = spacy.load("en_core_web_sm", exclude=["tokenizer"])
         
         # 2. Unified Intelligence Model (BART-Large-MNLI)
         # Used for BOTH Claim Typing and Stance Detection
@@ -58,7 +57,7 @@ class ModelManager:
             "zero-shot-classification",
             model="facebook/bart-large-mnli",
             device="cpu", # Use "cuda" if available, but "cpu" is safer for this dev env
-            torch_dtype=torch.float32
+            dtype=torch.float32
         )
         
         # Alias for backward compatibility if needed, but better to access unified_model

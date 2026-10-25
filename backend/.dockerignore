@@ -20,3 +20,9 @@ dist/
 build/
 tests/
 database/init/
+.env
+models/
+scripts/
+comprehensive_qa_test.py
+compare_models.py
+reproduce_stance.py

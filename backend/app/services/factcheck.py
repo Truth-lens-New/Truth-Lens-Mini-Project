@@ -6,7 +6,7 @@ Queries Google Fact Check Tools API for existing fact-checks.
 
 from typing import Optional, Dict, List
 import httpx
-import google.generativeai as genai
+from google import genai
 
 from app.core.config import settings
 
@@ -81,8 +81,8 @@ async def llm_interpret_rating(rating: str, summary: str, claim: str, url: str =
         return 'Unverifiable'
     
     try:
-        genai.configure(api_key=settings.gemini_api_key)
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        client = genai.Client(api_key=settings.gemini_api_key)
+
         
         prompt = f"""You are a fact-check rating interpreter. Your job is to determine whether a fact-check article SUPPORTS or REFUTES the original claim.
 
@@ -108,7 +108,10 @@ Respond with ONLY ONE of these exact words:
 
 Your response (one word only):"""
 
-        response = await model.generate_content_async(prompt)
+        response = await client.aio.models.generate_content(
+            model=settings.gemini_model,
+            contents=prompt
+        )
         result = response.text.strip().upper()
         
         # Validate response
