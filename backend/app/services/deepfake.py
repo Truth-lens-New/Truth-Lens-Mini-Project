@@ -56,7 +56,7 @@ class DeepfakeDetector:
             
         if model_path is None:
             # Default path relative to backend directory
-            model_path = Path(__file__).parent.parent.parent / "models" / "efficientnet_b3_production.pth"
+            model_path = Path(__file__).parent.parent.parent / "models" / "efficientnet_b3_best.pth"
         
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         print(f"Deepfake detector using device: {self.device}")
@@ -464,38 +464,48 @@ class DeepfakeDetector:
 
     def _check_gemini_synthid(self, image_bytes: bytes) -> bool:
         """
-        Send image to Gemini to check for SynthID watermark or definitive AI signature.
+        Send image to Gemini API to check if it is AI-generated.
+        This is the highest-priority check — called first before any local model.
+        Returns True if Gemini says the image is AI-generated, False otherwise.
         """
         if not settings.gemini_api_key:
+            print("[SynthID] Skipping — GEMINI_API_KEY not configured.")
             return False
-            
+
         try:
             genai.configure(api_key=settings.gemini_api_key)
-            model = genai.GenerativeModel('gemini-2.5-flash')
-            
-            # Format the image for Gemini
-            # We assume it's JPEG or PNG; just pass bytes directly as image
-            img_part = {
-                "mime_type": "image/jpeg", 
-                "data": image_bytes
-            }
-            
+            model = genai.GenerativeModel('gemini-3.6-flash')
+
+            # Auto-detect mime type from magic bytes
+            if image_bytes[:8] == b'\x89PNG\r\n\x1a\n':
+                mime_type = "image/png"
+            elif image_bytes[:4] == b'RIFF' and image_bytes[8:12] == b'WEBP':
+                mime_type = "image/webp"
+            else:
+                mime_type = "image/jpeg"
+
+            print(f"[SynthID] Calling Gemini API (mime={mime_type}, size={len(image_bytes)} bytes)...")
+
+            img_part = {"mime_type": mime_type, "data": image_bytes}
+
             prompt = (
-                "Analyze this image. Does it contain a Google SynthID watermark, "
-                "or is it definitively and obviously an AI-generated image according to your filters? "
-                "Reply with ONLY the word 'TRUE' if it is AI-generated or has a SynthID, "
-                "or 'FALSE' if it does not."
+                "Look at this image. Was it created by an AI image generator "
+                "(such as Gemini, DALL-E, Midjourney, Stable Diffusion, Firefly, Imagen, "
+                "or any similar tool)? "
+                "Answer with only one word: YES or NO."
             )
-            
+
             response = model.generate_content([prompt, img_part])
-            text = response.text.strip().upper()
-            
-            if "TRUE" in text:
-                return True
-                
-            return False
+            raw_text = (response.text or "").strip()
+            print(f"[SynthID] Gemini responded: '{raw_text}'")
+
+            upper = raw_text.upper()
+            is_ai_generated = ("YES" in upper) or ("TRUE" in upper)
+            print(f"[SynthID] Result => {'AI-GENERATED (FAKE)' if is_ai_generated else 'REAL'}")
+            return is_ai_generated
+
         except Exception as e:
-            print(f"Gemini SynthID check failed: {e}")
+            print(f"[SynthID] Gemini API error: {e}")
             return False
 
     def _compute_fusion_score(self, base_fake_prob: float, patch_result: dict, metadata_risk: int) -> tuple[float, str, list]:
@@ -554,19 +564,24 @@ class DeepfakeDetector:
             Dictionary with verdict, confidence, probabilities, metadata, evidence, and heatmap
         """
         try:
-            # 1. First Pass: Check for SynthID via Gemini API
-            if self._check_gemini_synthid(image_bytes):
+            # 1. First Pass: Check via Google Gemini API — highest authority
+            # If Gemini says FAKE, we trust it 100% and skip all local models
+            gemini_says_fake = self._check_gemini_synthid(image_bytes)
+            if gemini_says_fake:
                 return {
                     "verdict": "FAKE",
-                    "confidence": 99.0,
+                    "confidence": 100.0,
                     "confidence_level": "high",
-                    "real_probability": 1.0,
-                    "fake_probability": 99.0,
-                    "model": "Gemini SynthID Detector",
+                    "real_probability": 0.0,
+                    "fake_probability": 100.0,
+                    "model": "Google Gemini AI Detector",
                     "metadata": {},
                     "metadata_risk_score": 100,
                     "patch_analysis": None,
-                    "evidence": ["Google Gemini definitively detected a SynthID watermark or AI generation signature."],
+                    "evidence": [
+                        "🔴 Google Gemini API confirmed this image is AI-generated or fake.",
+                        "Verdict is 100% — Google's AI analysis overrides all local models."
+                    ],
                     "heatmap": None
                 }
                 
