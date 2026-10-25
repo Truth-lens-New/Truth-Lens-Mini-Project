@@ -72,7 +72,7 @@ class ClaimExtractorV3:
                 is_assertion = self._is_assertion(sub_sent)
                 might_be_claim = self._might_be_claim(sub_sent)
                 
-                if is_assertion or might_be_claim:
+                if (is_assertion or might_be_claim) and sub_text not in [c.text for c in claims]:
                     claim = RawClaim(
                         text=sub_text,
                         sentence_index=idx * 100 + sub_idx, # Unique index

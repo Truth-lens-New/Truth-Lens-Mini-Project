@@ -116,13 +116,14 @@ class FirecrawlSearcher:
             highlights = item.get("highlights") or []
             highlights_text = " ".join(map(str, highlights)) if isinstance(highlights, list) else str(highlights)
             markdown = item.get("markdown") or item.get("content") or ""
+            # Prefer description and highlights; limit markdown context to prevent pipeline bloat
             snippet = "\n".join(
-                part for part in (item.get("description", ""), highlights_text, markdown[:6000]) if part
+                part for part in (item.get("description", ""), highlights_text, markdown[:500]) if part
             )
             parsed.append(SearchResult(
                 title=item.get("title") or metadata.get("title") or url,
                 url=url,
-                snippet=snippet[:6500],
+                snippet=snippet[:800],
                 source="Firecrawl",
                 source_domain=domain or "unknown",
             ))

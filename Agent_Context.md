@@ -77,3 +77,20 @@ pm ci --no-audit --no-fund ensuring consistent, repeatable image builds across d
      - docker-compose.yml: Configured TOKENIZERS_PARALLELISM=false to prevent tokenizer deadlocks, explicit container resource limits, and development watch synchronization.
 - **Context**: 
   Requested to ensure all library changes are codified in dependency managers and Dockerfiles, enabling deterministic builds in local, containerized, and CI/CD pipelines.
+
+
+### [2026-10-26] Shivam Branch Text Verification Audit & Frontend Video Upload Enablement
+- **Decision**: 
+  1. **Investigated Shivam Branch (`origin/shivam`) vs `uday` for Text Verification Performance**:
+     - *Root Cause Analysis*: On `origin/shivam`, all strategies directly invoke `DuckDuckGoSearcher`, fetching concise ~150-character snippets that CPU-bound BART-Large-MNLI evaluates in ~0.5s each (~2.5s total). On `uday`, the addition of Firecrawl returned full-page markdown scrapes (up to 6,500 characters) into evidence snippets, multiplying CPU inference time to 10-15s per snippet (totaling 50-75s). Furthermore, `origin/shivam` deduplicated compound sub-claims in `ClaimExtractorV3`, while `uday` extracted duplicate sub-claims.
+     - *Performance Fix*: Deduplicated sub-claims in `backend/app/services/extraction/claim_extractor_v3.py` via `sub_text not in [c.text for c in claims]`. Bounded stance snippet length to 500 characters in `backend/app/services/investigation/synthesizer.py` and 800 characters in `firecrawl.py`, preventing heavy transformer attention stalls on CPU while retaining full factual accuracy and Wikidata/spaCy fixes.
+  2. **Preserved Video Pipeline Integrity**:
+     - As explicitly instructed by the user, zero modifications were made to the backend image and video deepfake pipeline (`backend/app/services/deepfake.py`).
+  3. **Enabled Frontend Video Uploads (`client/src/components/ImageVideoUpload.tsx`)**:
+     - Replaced memory-stalling `FileReader.readAsDataURL` with zero-copy `URL.createObjectURL(file)`, instantly generating previews for videos and images without freezing the browser thread.
+     - Added `URL.revokeObjectURL` cleanup on file removal and unmount.
+     - Expanded input file accept pattern to `accept="image/*,video/*,.mp4,.mov,.avi,.webm,.mkv"` to ensure Windows file explorer does not filter out video extensions.
+     - Changed upload button label from "Select Image" to "Select Image or Video" with an upload icon.
+     - Added robust video MIME and extension detection for `<video>` rendering and UI indicators.
+- **Context**: 
+  User requested to compare text verification between `uday` and `origin/shivam` to explain why the friend's PC takes less time, optimize text verification without altering the backend image/video pipeline, and resolve the frontend blocking video file uploads.

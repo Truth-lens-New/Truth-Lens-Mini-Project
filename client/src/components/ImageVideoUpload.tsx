@@ -51,13 +51,44 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
   };
 
   const handleFile = (file: File) => {
-    setFile(file);
     setError(null);
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      setPreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    const validVideo = file.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv)$/i.test(file.name);
+    const validImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|bmp)$/i.test(file.name);
+
+    if (!validImage && !validVideo) {
+      setError('Unsupported file type. Please upload an image (JPG, PNG, WebP) or video (MP4, MOV, WebM).');
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      setError('File too large. Maximum size is 50MB.');
+      return;
+    }
+
+    if (preview && preview.startsWith('blob:')) {
+      URL.revokeObjectURL(preview);
+    }
+
+    setFile(file);
+    try {
+      const objectUrl = URL.createObjectURL(file);
+      setPreview(objectUrl);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setPreview(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleRemove = () => {
+    if (preview && preview.startsWith('blob:')) {
+      URL.revokeObjectURL(preview);
+    }
+    setFile(null);
+    setPreview(null);
+    setError(null);
   };
 
   const handleAnalyze = async () => {
@@ -206,7 +237,7 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
 
               <div className="relative flex flex-col md:flex-row items-center gap-6">
                 <div className="w-full md:w-1/2 flex justify-center bg-black/20 rounded-xl p-2">
-                  {file.type.startsWith('video/') ? (
+                  {(file.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv)$/i.test(file.name)) ? (
                     <video
                       src={preview}
                       controls
@@ -231,14 +262,11 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
                   </div>
                   <div>
                     <div className="text-sm text-muted-foreground mb-1">Type</div>
-                    <div>{file.type.includes('video') ? 'Video' : 'Image'}</div>
+                    <div>{(file.type.startsWith('video/') || /\.(mp4|mov|webm|avi|mkv)$/i.test(file.name)) ? 'Video' : 'Image'}</div>
                   </div>
 
                   <button
-                    onClick={() => {
-                      setFile(null);
-                      setPreview(null);
-                    }}
+                    onClick={handleRemove}
                     className="mt-6 px-4 py-2 rounded-lg bg-card/50 border border-border/50 hover:bg-muted/20 transition-colors flex items-center gap-2 text-foreground"
                   >
                     <X className="w-4 h-4" />
@@ -277,17 +305,17 @@ export function ImageVideoUpload({ userMode }: ImageVideoUploadProps) {
 
               <input
                 type="file"
-                accept="image/*,video/*"
+                accept="image/*,video/*,.mp4,.mov,.avi,.webm,.mkv"
                 onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
                 className="hidden"
                 id="file-upload"
               />
               <label
                 htmlFor="file-upload"
-                className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-card border border-border/50 hover:bg-muted/20 cursor-pointer transition-all text-foreground"
+                className="inline-flex items-center gap-3 px-6 py-3 rounded-xl bg-card border border-border/50 hover:bg-muted/20 cursor-pointer transition-all text-foreground shadow-sm hover:border-[#00FFC3]/40"
               >
-                <Image className="w-5 h-5" />
-                <span>Select Image</span>
+                <Upload className="w-5 h-5 text-[#00FFC3]" />
+                <span>Select Image or Video</span>
               </label>
 
               <div className="mt-8 flex items-center justify-center gap-6 text-xs text-muted-foreground">

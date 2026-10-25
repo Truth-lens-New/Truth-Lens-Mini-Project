@@ -33,7 +33,9 @@ class EvidenceSynthesizer:
         Detect the stance of evidence relative to a claim using RoBERTa.
         """
         try:
-            result = self.stance_detector.detect(claim_text, evidence_text)
+            # Bound snippet length to 500 chars to prevent heavy CPU attention stalls on BART
+            sample_text = evidence_text[:500] if len(evidence_text) > 500 else evidence_text
+            result = self.stance_detector.detect(claim_text, sample_text)
             
             label = result["label"]
             score = result["score"]
