@@ -278,6 +278,14 @@ export async function investigateClaim(content: string, inputType: 'text' | 'url
         body: JSON.stringify({ content, input_type: inputType }),
     });
 
+    // Expired/invalid session: log out and send to login instead of failing
+    // with the generic halted-gauge screen.
+    if (response.status === 401) {
+        logout();
+        window.location.href = '/login';
+        throw new Error('Session expired. Please log in again.');
+    }
+
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         // Handle Pydantic validation errors (array of objects) and string errors
