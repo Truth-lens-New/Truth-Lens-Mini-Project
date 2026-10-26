@@ -62,6 +62,7 @@ DEFAULT_MAX_CLAIMS_TEXT = 10
 DEFAULT_MAX_CLAIMS_ARTICLE = 7
 DUPLICATE_JACCARD = 0.75
 DUPLICATE_COSINE = 0.92
+ASSERTION_FALLBACK_WORDS = 25      # short assertive text never returns 0 claims
 
 
 # --------------------------------------------------------------------------- #
@@ -248,6 +249,18 @@ class ClaimExtractorV3:
 
         self._link_premises(candidates)
         self._score_and_filter(candidates, article_mode)
+
+        # Fallback: a short, clearly assertive statement ("X is Y.") must
+        # always stay checkable. If scoring dropped everything (transient
+        # parsing/model variance), resurrect the strongest assertive
+        # candidate instead of answering "No Verifiable Claims Found".
+        if not any(c.drop_reason == "" for c in candidates):
+            assertive = [c for c in candidates if c.is_assertion]
+            if len(text.split()) <= ASSERTION_FALLBACK_WORDS and assertive:
+                best = max(assertive, key=lambda c: c.final_score)
+                best.drop_reason = ""
+                logger.info("Assertion fallback: recovered '%s' after filter drop", best.text)
+
         kept = self._dedupe(candidates)
         kept = self._trim(kept, max_claims)
 
