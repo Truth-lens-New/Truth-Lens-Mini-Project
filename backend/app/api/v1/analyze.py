@@ -303,6 +303,8 @@ class MediaAnalysisResponse(BaseModel):
     heatmap: Optional[str] = Field(default=None, description="Base64 encoded Grad-CAM heatmap")
     frames_analyzed: Optional[int] = Field(default=None, description="Number of video frames analyzed (videos only)")
     frame_results: Optional[list] = Field(default=None, description="Timestamped per-frame verdicts and probabilities (videos only)")
+    patch_analysis: Optional[dict] = Field(default=None, description="Multi-patch scan summary (images only; None when the image is small)")
+    fusion_method: Optional[str] = Field(default=None, description="How CNN, patch, and metadata scores were fused (images only)")
 
 
 @router.post("/analyze-media", response_model=MediaAnalysisResponse)
@@ -315,7 +317,8 @@ async def analyze_media(
     Analyze an uploaded image or video for deepfake detection.
 
     Uses EfficientNet-B3 model trained on deepfake datasets.
-    - Images: single-frame analysis with EXIF metadata heuristics + Grad-CAM heatmap.
+    - Images: full-image CNN + Gemini SynthID pre-flight + 300x300 multi-patch
+      scan, fused (65/25/10) with metadata risk; Grad-CAM heatmap attached.
     - Videos: up to 8 evenly spaced frames decoded via OpenCV, verdict averaged
       from per-frame model probabilities (50 MB / 30 s limits apply).
 

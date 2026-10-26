@@ -317,6 +317,186 @@ class DeepfakeDetector:
         threshold, _ = self._load_calibration()
         return "FAKE" if fake_prob >= threshold else "REAL"
 
+    # =========================================================================
+    # Multi-patch scan, Gemini SynthID pre-flight, and score fusion
+    # =========================================================================
+    # Ported from the uday branch (560ca7e). A single full-image pass can miss
+    # localized manipulations because the whole picture is squeezed into one
+    # 300x300 tensor; the multi-patch scan classifies overlapping crops at
+    # native resolution, and the fusion blends CNN + patch + metadata signals.
+
+    def _multi_patch_predict(self, image: Image.Image) -> dict:
+        """
+        Classify overlapping image patches independently.
+
+        Extracts 300x300 crops at 50% stride from the image at native
+        resolution. This catches localized manipulations (e.g. a face-swap
+        inside a larger scene) that vanish when the full image is resized
+        to a single 300x300 tensor.
+
+        Returns:
+            dict with suspicious_patches, total_patches, max/avg patch fake
+            probability, patch_agreement and human-readable evidence strings.
+            All-zero when the image is too small to patch (<350px).
+        """
+        empty = {
+            "suspicious_patches": 0,
+            "total_patches": 0,
+            "max_patch_fake_prob": 0.0,
+            "avg_patch_fake_prob": 0.0,
+            "patch_agreement": 1.0,
+            "evidence": [],
+        }
+        try:
+            w, h = image.size
+            patch_size = 300
+
+            # Skip patching for small images — the full-image pass already
+            # sees them at native scale.
+            if w < 350 or h < 350:
+                return empty
+
+            stride = patch_size // 2
+            xs = range(0, w - patch_size + 1, stride)
+            ys = range(0, h - patch_size + 1, stride)
+            coords = [(x, y) for y in ys for x in xs]
+
+            # Cap at 16 patches to keep latency reasonable. Picked evenly
+            # spaced over the whole coordinate grid so large images don't
+            # leave the bottom/right side unscanned.
+            if len(coords) > 16:
+                step = (len(coords) - 1) / 15.0
+                coords = [coords[int(round(i * step))] for i in range(16)]
+
+            batch = torch.stack([
+                self.transform(image.crop((x, y, x + patch_size, y + patch_size)))
+                for (x, y) in coords
+            ]).to(self.device)
+
+            self.model.eval()
+            with torch.no_grad():
+                # Same temperature scaling as the full-image pass
+                probs = self._apply_calibration(self.model(batch))
+            fake_probs = [row[1].item() for row in probs]
+
+            # Same calibrated boundary for patch-level "suspicious" calls
+            threshold = self._load_calibration()[0]
+            n_fake = sum(1 for p in fake_probs if p >= threshold)
+            n_real = len(fake_probs) - n_fake
+            agreement = max(n_fake, n_real) / len(fake_probs)
+            max_fake = max(fake_probs)
+            avg_fake = sum(fake_probs) / len(fake_probs)
+
+            evidence = []
+            if n_fake > 0:
+                evidence.append(
+                    f"Patch scan: {n_fake}/{len(fake_probs)} patches flagged as FAKE "
+                    f"(max {round(max_fake * 100, 1)}%, avg {round(avg_fake * 100, 1)}%)"
+                )
+            else:
+                evidence.append(
+                    f"Patch scan: all {len(fake_probs)} patches appear authentic "
+                    f"(max fake probability {round(max_fake * 100, 1)}%)"
+                )
+
+            return {
+                "suspicious_patches": n_fake,
+                "total_patches": len(fake_probs),
+                "max_patch_fake_prob": max_fake,
+                "avg_patch_fake_prob": avg_fake,
+                "patch_agreement": agreement,
+                "evidence": evidence,
+            }
+
+        except Exception as exc:
+            print(f"Multi-patch scan failed (continuing with full-image score): {exc}")
+            return empty
+
+    def _check_gemini_synthid(self, image_bytes: bytes, content_type: str = "image/jpeg") -> bool:
+        """
+        Gemini pre-flight: does the image carry a SynthID watermark or
+        show definitive AI generation?
+
+        Returns True only when Gemini clearly answers TRUE. Any failure
+        (no API key, rate limit, network error, safety block) fails OPEN:
+        the local CNN pipeline runs as usual.
+        """
+        try:
+            from app.core.config import settings
+            if not settings.gemini_api_key:
+                return False
+
+            import google.generativeai as genai
+            genai.configure(api_key=settings.gemini_api_key)
+            model = genai.GenerativeModel(settings.gemini_model)
+
+            img_part = {"mime_type": content_type or "image/jpeg", "data": image_bytes}
+            prompt = (
+                "Analyze this image. Does it contain a Google SynthID watermark, "
+                "or is it definitively and obviously an AI-generated image "
+                "according to your filters? Reply with ONLY the word 'TRUE' if it "
+                "is AI-generated or has a SynthID, or 'FALSE' if it does not."
+            )
+
+            response = model.generate_content([prompt, img_part])
+            text = response.text.strip().upper()
+            return "TRUE" in text
+        except Exception as exc:
+            print(f"Gemini SynthID check failed (falling back to local CNN): {exc}")
+            return False
+
+    def _compute_fusion_score(
+        self, base_fake_prob: float, patch_result: dict, metadata_risk: int
+    ) -> tuple:
+        """
+        Fuse CNN, patch-scan, and metadata signals into one fake probability.
+
+        Weights: 65% full-image CNN, 25% suspicious-patch ratio, 10% metadata
+        risk. When the CNN alone is already very confident (>=0.85 or <=0.15)
+        secondary signals are capped to a ±5% deviation so they can reinforce
+        but never overrule strong model certainty.
+
+        Returns:
+            (fused_fake_prob, fusion_method, fusion_evidence)
+        """
+        evidence = []
+        is_high_conf = base_fake_prob >= 0.85 or base_fake_prob <= 0.15
+
+        n_suspicious = patch_result.get("suspicious_patches", 0)
+        n_total = max(patch_result.get("total_patches", 0), 1)
+        patch_ratio = n_suspicious / n_total
+
+        fused = (
+            base_fake_prob * 0.65
+            + patch_ratio * 0.25
+            + (min(100, metadata_risk) / 100.0) * 0.10
+        )
+
+        if is_high_conf:
+            max_deviation = 0.05
+            capped = max(base_fake_prob - max_deviation,
+                         min(base_fake_prob + max_deviation, fused))
+            if abs(capped - fused) > 0.001:
+                method = "high_conf_capped"
+                evidence.append(
+                    "Score fusion safely capped (max ±5%) to preserve strong "
+                    "model certainty."
+                )
+            else:
+                method = "weighted"
+            fused = capped
+        else:
+            method = "weighted"
+            if abs(fused - base_fake_prob) > 0.05:
+                shifted_to = "FAKE" if fused > base_fake_prob else "REAL"
+                evidence.append(
+                    f"Secondary signals (patch scan + metadata) shifted the "
+                    f"probability by {round(abs(fused - base_fake_prob) * 100, 1)}% "
+                    f"toward {shifted_to}."
+                )
+
+        return fused, method, evidence
+
     def _generate_heatmap(self, image_tensor, original_image):
         """Generate Grad-CAM heatmap."""
         try:
@@ -361,17 +541,46 @@ class DeepfakeDetector:
             print(f"Heatmap generation failed: {e}")
             return None, None
     
-    def predict(self, image_bytes: bytes) -> dict:
+    def predict(self, image_bytes: bytes, content_type: str = "image/jpeg") -> dict:
         """
         Predict if an image is real or fake.
-        
+
+        Image flow (uday-branch port):
+          1. Gemini SynthID pre-flight — short-circuits definitively
+             AI-generated / watermarked images; fails open to the CNN.
+          2. Full-image CNN pass with Grad-CAM heatmap (raw logits).
+          3. Multi-patch scan at native resolution (catches localized edits).
+          4. Weighted fusion: 65% CNN + 25% patch scan + 10% metadata,
+             verdict cut at the calibrated threshold.
+
         Args:
             image_bytes: Raw image bytes
-            
+            content_type: MIME type, forwarded to the Gemini pre-flight
+
         Returns:
             Dictionary with verdict, confidence, probabilities, metadata, evidence, and heatmap
         """
         try:
+            # --- 1. SynthID / obvious-AI pre-flight (fails open to CNN) ---
+            if self._check_gemini_synthid(image_bytes, content_type):
+                return {
+                    "verdict": "FAKE",
+                    "confidence": 99.0,
+                    "confidence_level": "high",
+                    "real_probability": 1.0,
+                    "fake_probability": 99.0,
+                    "model": "Gemini SynthID Detector",
+                    "metadata": {},
+                    "metadata_risk_score": 100,
+                    "patch_analysis": None,
+                    "evidence": [
+                        "Google Gemini definitively detected a SynthID watermark "
+                        "or AI generation signature."
+                    ],
+                    "heatmap": None,
+                }
+
+            # --- 2. Full-image CNN pass ---
             # Load image
             image = Image.open(io.BytesIO(image_bytes))
             
@@ -398,11 +607,9 @@ class DeepfakeDetector:
             outputs = self.model(input_tensor)
             probabilities = self._apply_calibration(outputs)
             
-            # Get prediction
+            # Get prediction (calibrated probabilities; the same temperature
+            # and boundary are applied to per-patch scores below)
             predicted_class = torch.argmax(probabilities, dim=1).item()
-            confidence = probabilities[0][predicted_class].item()
-            
-            real_prob = probabilities[0][0].item()
             fake_prob = probabilities[0][1].item()
             
             # Generate heatmap for the predicted class (raw logits, unaffected
@@ -419,71 +626,64 @@ class DeepfakeDetector:
             # Generate heatmap
             heatmap_b64, heatmap_data_url = self._generate_heatmap(input_tensor, image_rgb)
             
-            # Determine verdict using the calibrated decision boundary
-            verdict = "FAKE" if fake_prob >= self._load_calibration()[0] else "REAL"
-            
-            # ============================================
-            # Integrate metadata risk score with model prediction
-            # ============================================
-            metadata_risk = meta_result.get("risk_score", 0)
-            evidence = meta_result["evidence"].copy()
-            
-            # Adjust probabilities based on metadata evidence
-            # High metadata risk (≥60) suggests strong AI indicators
-            adjusted_fake_prob = fake_prob
-            if metadata_risk >= 60:
-                # Strong metadata evidence of AI - boost fake probability
-                adjustment = min(0.1, metadata_risk / 1000)  # Up to 10% boost
-                adjusted_fake_prob = min(0.99, fake_prob + adjustment)
-                evidence.insert(0, f"Metadata analysis indicates high AI risk ({metadata_risk}/100)")
-            elif metadata_risk >= 30:
-                # Moderate metadata evidence
-                evidence.insert(0, f"Metadata analysis indicates moderate AI risk ({metadata_risk}/100)")
-            else:
-                # Low metadata risk - slight confidence in real
-                if verdict == "REAL":
-                    evidence.insert(0, f"Metadata analysis supports authenticity ({metadata_risk}/100 risk)")
-            
-            # Re-evaluate verdict if metadata strongly contradicts model
-            # If model says REAL but metadata risk is very high (≥70), flag as uncertain
-            if verdict == "REAL" and metadata_risk >= 70:
-                evidence.insert(0, "⚠️ Warning: Model predicts REAL but metadata shows strong AI indicators")
-            
-            # If model is uncertain but metadata shows strong AI indicators,
-            # the model's verdict STANDS — metadata no longer flips FAKE.
-            # (Previously: confidence < 0.6 and metadata_risk >= 50 flipped
-            # the verdict, pushing every EXIF-less screenshot to FAKE.)
-            
-            # Add model-based evidence
-            if verdict == "FAKE":
-                evidence.insert(0, f"Neural network detected manipulation patterns with {round(fake_prob * 100, 1)}% confidence")
-            else:
-                evidence.insert(0, f"Neural network found authentic patterns with {round(real_prob * 100, 1)}% confidence")
-            
-            if heatmap_data_url:
-                evidence.append("Analysis heatmap generated showing focus regions")
+            # --- 3. Multi-patch scan + 4. score fusion ---
+            patch_result = self._multi_patch_predict(image_rgb)
 
-            # Confidence level description (now considers metadata)
-            combined_confidence = confidence
-            if metadata_risk >= 60 and verdict == "FAKE":
-                combined_confidence = min(0.99, confidence + 0.05)  # Boost confidence
-            
-            if combined_confidence >= 0.9:
+            metadata_risk = meta_result.get("risk_score", 0)
+            fused_fake_prob, fusion_method, fusion_evidence = self._compute_fusion_score(
+                base_fake_prob=fake_prob,
+                patch_result=patch_result,
+                metadata_risk=metadata_risk,
+            )
+            fused_real_prob = 1.0 - fused_fake_prob
+
+            # Final verdict at the calibrated decision boundary, applied to
+            # the FUSED probability (metadata influences the fusion input,
+            # but can never flip a verdict on its own).
+            verdict = self._verdict_at_threshold(fused_fake_prob)
+
+            confidence = max(fused_fake_prob, fused_real_prob)
+            if confidence >= 0.9:
                 confidence_level = "high"
-            elif combined_confidence >= 0.7:
+            elif confidence >= 0.7:
                 confidence_level = "medium"
             else:
                 confidence_level = "low"
-            
+
+            evidence = meta_result["evidence"].copy()
+
+            if verdict == "FAKE":
+                evidence.insert(0, f"Analysis (CNN + patch scan + metadata) detected manipulation patterns ({round(fused_fake_prob * 100, 1)}% fakeness)")
+            else:
+                evidence.insert(0, f"Analysis (CNN + patch scan + metadata) found authentic patterns ({round(fused_real_prob * 100, 1)}% realness)")
+
+            evidence.extend(patch_result.get("evidence", []))
+            evidence.extend(fusion_evidence)
+
+            if heatmap_data_url:
+                evidence.append("Analysis heatmap generated showing focus regions")
+
+            patch_summary = None
+            if patch_result.get("total_patches", 0) > 0:
+                patch_summary = {
+                    "suspicious_patches": patch_result["suspicious_patches"],
+                    "total_patches": patch_result["total_patches"],
+                    "max_fake_prob": round(patch_result["max_patch_fake_prob"] * 100, 1),
+                    "avg_fake_prob": round(patch_result["avg_patch_fake_prob"] * 100, 1),
+                    "patch_agreement": round(patch_result["patch_agreement"] * 100, 1),
+                }
+
             return {
                 "verdict": verdict,
-                "confidence": round(combined_confidence * 100, 2),
+                "confidence": round(confidence * 100, 2),
                 "confidence_level": confidence_level,
-                "real_probability": round(real_prob * 100, 2),
-                "fake_probability": round(adjusted_fake_prob * 100, 2),
-                "model": "EfficientNet-B3",
+                "real_probability": round(fused_real_prob * 100, 2),
+                "fake_probability": round(fused_fake_prob * 100, 2),
+                "model": "EfficientNet-B3 + MultiPatch (Fused)",
                 "metadata": meta_result["metadata"],
                 "metadata_risk_score": metadata_risk,
+                "patch_analysis": patch_summary,
+                "fusion_method": fusion_method,
                 "evidence": evidence,
                 "heatmap": heatmap_data_url
             }
@@ -594,7 +794,7 @@ async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "im
 
     # Offload CPU-intensive ML inference to a thread pool
     return await loop.run_in_executor(
-        None, functools.partial(detector.predict, image_bytes)
+        None, functools.partial(detector.predict, image_bytes, content_type)
     )
 
 
