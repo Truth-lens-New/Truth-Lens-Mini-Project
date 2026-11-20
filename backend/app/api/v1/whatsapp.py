@@ -16,14 +16,6 @@ from app.core.config import settings
 from app.core.twilio_guard import is_valid_twilio_signature
 from app.services.chatbot import generate_chat_response
 from app.services import (
-    extract_claims,
-    search_factchecks,
-    search_news,
-    classify_all_stances,
-    weighted_stance,
-    aggregate_verdict,
-    generate_explanation,
-    llm_assess_claim,
     analyze_image_for_deepfake,
 )
 
@@ -73,9 +65,26 @@ def verdict_emoji(verdict: str) -> str:
         return "✅"
     if "false" in v or "refut" in v or "mislead" in v:
         return "❌"
-    if "mixed" in v or "uncertain" in v:
+    if "disputed" in v or "mixed" in v or "uncertain" in v or "developing" in v:
         return "⚠️"
+    if "not_checkable" in v or "opinion" in v:
+        return "💭"
     return "🔍"
+
+
+# Text pipeline shared with the web app (v3 verdict engine). Kept as a lazy
+# singleton so the ML models load once and are reused across messages.
+_TEXT_PIPELINE = None
+
+
+def _get_text_pipeline():
+    global _TEXT_PIPELINE
+    if _TEXT_PIPELINE is None:
+        from app.services.extraction import ClaimExtractorV3
+        from app.services.typing import ClaimClassifier
+        from app.services.investigation import get_verdict_engine
+        _TEXT_PIPELINE = (ClaimExtractorV3(), ClaimClassifier(), get_verdict_engine())
+    return _TEXT_PIPELINE
 
 
 MENU_TEXT = """🦉 *TruthLens Main Menu*
@@ -205,72 +214,42 @@ async def whatsapp_webhook(
 # ── Background Processors ───────────────────────────────────────────────────
 
 async def _process_text_claim_bg(claim: str, to_number: str):
-    """Run full fact-check pipeline in background and send progressive WhatsApp push replies."""
+    """Run the v3 verdict pipeline (same as the web app) and push the report."""
     try:
-        await send_whatsapp_message(to_number, "⏳ *Step 1/4* | _Breaking down your claim..._")
-        claim_result = await extract_claims(claim)
-        primary_claim = claim_result.get("primary_claim") or claim[:500]
+        await send_whatsapp_message(to_number, "⏳ *Step 1/2* | _Breaking down your claim..._")
 
-        await send_whatsapp_message(to_number, "🔍 *Step 2/4* | _Searching fact-check databases..._")
-        factcheck = await search_factchecks(primary_claim)
-        
-        await send_whatsapp_message(to_number, "🌐 *Step 3/4* | _Gathering global news sources..._")
-        articles = await search_news(primary_claim, max_results=5)
-        
-        await send_whatsapp_message(to_number, "🤖 *Step 4/4* | _AI analyzing semantic stances..._")
-        articles_with_stance = await classify_all_stances(primary_claim, articles)
-        stance_summary = weighted_stance(articles_with_stance)
+        extractor, classifier, engine = _get_text_pipeline()
+        from app.services.input import InputGateway
 
-        verdict_result = aggregate_verdict(
-            factcheck_result=factcheck,
-            stance_summary=stance_summary,
-            domain_trust={"score": "unknown"},
-        )
+        processed = InputGateway().process("text", claim)
+        claims = extractor.extract(processed)
+        if not claims:
+            await send_whatsapp_message(
+                to_number,
+                "🤔 I couldn't find a checkable factual claim in that message.\n"
+                "Try a specific, verifiable statement.",
+            )
+            return
 
-        if verdict_result.get("basis") in ("insufficient_evidence", "mixed_evidence"):
-            llm = await llm_assess_claim(primary_claim)
-            if llm.get("used") and llm.get("verdict"):
-                verdict_result = {
-                    "verdict": llm["verdict"],
-                    "confidence": llm.get("confidence", "medium"),
-                    "basis": "llm_assessment",
-                }
+        typed = classifier.classify(claims)
+        result = await engine.verify(typed[0])
 
-        await send_whatsapp_message(to_number, "✅ _Finalizing executive summary..._")
-        explanation = await generate_explanation({
-            "claim": primary_claim,
-            "verdict": verdict_result["verdict"],
-            "confidence": verdict_result["confidence"],
-            "factcheck": factcheck,
-            "stance_summary": stance_summary,
-            "domain_trust": {"score": "unknown"},
-        })
+        await send_whatsapp_message(to_number, "🔍 *Step 2/2* | _Analyzing evidence..._")
 
-        verdict = verdict_result["verdict"]
-        confidence = verdict_result["confidence"]
+        verdict = result.verdict.value
+        confidence = round((result.confidence or 0) * 100)
         emoji = verdict_emoji(verdict)
 
-        counts = stance_summary.get("counts", {})
-        supports = counts.get("SUPPORTS", 0)
-        refutes = counts.get("REFUTES", 0)
-        discuss = counts.get("DISCUSS", 0)
-        unrelated = counts.get("UNRELATED", 0)
-        total_sources = supports + refutes + discuss + unrelated
-
-        short_explanation = explanation[:800] + "..." if len(explanation) > 800 else explanation
-
-        fact_line = ""
-        if factcheck.get("found") and factcheck.get("rating"):
-            fact_line = f"\n🏷 *Official Fact-check:* _{factcheck['rating']}_ \n🔗 *Source:* {factcheck.get('source','')}"
+        summary = result.evidence_summary or ""
+        if len(summary) > 700:
+            summary = summary[:700] + "..."
 
         reply = (
-            f"*{claim[:100]}...*\n\n"
-            f"{emoji} *VERDICT: {verdict.upper()}*\n"
-            f"📊 *Confidence:* {confidence}\n"
-            f"🗞 *Sources Evaluated:* {total_sources} "
-            f"({supports} support | {refutes} refute | {discuss} discuss)\n"
-            f"{fact_line}\n\n"
-            f"📋 *Executive Summary*\n{short_explanation}"
+            f"*{claim[:100]}*\n\n"
+            f"{emoji} *VERDICT: {verdict.upper().replace('_', ' ')}*\n"
+            f"📊 *Confidence:* {confidence}%\n"
+            f"🗞 *Sources checked:* {result.sources_checked}\n\n"
+            f"📋 *Summary*\n{summary}"
         )
 
         await send_whatsapp_message(to_number, reply)
