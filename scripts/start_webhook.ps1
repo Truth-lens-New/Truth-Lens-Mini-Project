@@ -56,7 +56,14 @@ Set-Content -Path $envFile -Value $lines -Encoding UTF8
 
 # Recreate the backend so the setting is read (restart is not enough)
 Push-Location $repoRoot
+docker info 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Docker daemon is not running. Start Docker Desktop and run this script again."
+}
 docker compose up -d backend | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "docker compose up failed - check Docker Desktop and the compose stack."
+}
 Pop-Location
 
 Write-Output ""
