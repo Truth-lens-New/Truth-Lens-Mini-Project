@@ -115,10 +115,23 @@ _STOPWORD_TOKENS = frozenset({
 })
 
 
+def _stem(token: str) -> str:
+    """Tiny plural/verb-form normalizer (no external deps).
+
+    'vaccines' -> 'vaccine', 'contains' -> 'contain' so a fact-check that
+    paraphrases with different morphology still counts as covering the claim.
+    """
+    if len(token) > 4 and token.endswith("ies"):
+        return token[:-3] + "y"
+    if len(token) > 3 and token.endswith("s") and not token.endswith("ss"):
+        return token[:-1]
+    return token
+
+
 def _content_tokens(text: str) -> set:
     """Lowercase alphanumeric tokens minus a tiny stopword list."""
     return {
-        token for token in re.findall(r"[a-z0-9]{3,}", (text or "").lower())
+        _stem(token) for token in re.findall(r"[a-z0-9]{3,}", (text or "").lower())
         if token not in _STOPWORD_TOKENS
     }
 
