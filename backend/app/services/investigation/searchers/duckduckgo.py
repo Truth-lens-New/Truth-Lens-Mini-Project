@@ -32,7 +32,10 @@ class DuckDuckGoSearcher:
     - Parallel execution support for Phase 2B
     """
     
-    def __init__(self, region: str = "wt-wt", safe_search: str = "moderate"):
+    def __init__(self, region: str = "in-en", safe_search: str = "moderate"):
+        # NOTE: 'wt-wt' (ddgs's "no region" default) resolves to a broken
+        # wt.wikipedia.org mirror and fails with DNS errors; an explicit
+        # region keeps searches working.
         self.region = region
         self.safe_search = safe_search
     

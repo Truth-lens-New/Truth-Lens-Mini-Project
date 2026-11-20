@@ -137,6 +137,29 @@ def factcheck_is_relevant(claim_text: str, factcheck_text: str, min_jaccard: flo
     return overlap >= min_jaccard
 
 
+def factcheck_coverage(claim_text: str, factcheck_text: str) -> float:
+    """
+    Fraction of the CLAIM's content tokens that appear in the fact-check text.
+
+    Thematic overlap is not enough for a definitive verdict: a fact-check
+    about a fake *video* of Chandrayaan-3 shares "chandrayaan 3 moon" tokens
+    with the claim "Chandrayaan-3 soft-landed on 23 August 2023" yet rates a
+    completely different statement. Requiring most of the claim's tokens to
+    be covered keeps only checks of the SAME statement definitive; weaker
+    matches stay as neutral context.
+    """
+    claim_tokens = _content_tokens(claim_text)
+    match_tokens = _content_tokens(factcheck_text)
+    if not claim_tokens:
+        return 0.0
+    return len(claim_tokens & match_tokens) / len(claim_tokens)
+
+
+# Minimum share of the claim's tokens a fact-check must cover before its
+# True/False rating may drive the verdict.
+DEFINITIVE_FACTCHECK_COVERAGE = 0.60
+
+
 # Temporal qualifiers: two claims about the same subject with different time
 # qualifiers ("grows taller in summer" vs "grows taller every year") read as
 # the same text to token-overlap matching. Bucket them so a mismatch can be

@@ -8,7 +8,8 @@ from app.models.domain import TypedClaim, ClaimType
 from app.models.evidence import EvidenceCollection, EvidenceType, EvidenceItem, Verdict, Stance
 from app.services.evidence.known_misinfo_checker import KnownMisinfoChecker
 from app.services.evidence.ratings import (
-    normalize_rating, stance_from_rating, factcheck_is_relevant, qualifier_conflict,
+    normalize_rating, stance_from_rating, factcheck_is_relevant, factcheck_coverage,
+    qualifier_conflict, DEFINITIVE_FACTCHECK_COVERAGE,
 )
 from app.services.evidence.wikidata_verifier import WikidataVerifier
 from app.services.evidence.google_factcheck import GoogleFactCheck
@@ -93,11 +94,25 @@ class InvestigationOrchestrator:
                 logger.info("Fact-check from %s is not relevant to the claim; ignoring.", publisher)
                 continue
 
-            # Tested phrase mapping ("not true" -> False, "half true" ->
-            # Misleading, ...). Unmapped/weak ratings stay NEUTRAL and can
-            # never trigger the definitive early stop below; hedged ratings
-            # ("mostly true/false") contribute at 0.80 without early-stopping.
-            stance, stance_confidence = stance_from_rating(rating)
+            # Thematic overlap alone is not enough: a fact-check about a fake
+            # video/photo of the same event shares tokens with the claim but
+            # rates a different statement. Only checks that cover most of the
+            # claim's content tokens may drive a definitive verdict; weaker
+            # matches stay as neutral context.
+            coverage = factcheck_coverage(claim.text, checked_text)
+            if coverage < DEFINITIVE_FACTCHECK_COVERAGE:
+                logger.info(
+                    "Fact-check from %s covers only %.0f%% of the claim's tokens; "
+                    "treating as related-but-different neutral evidence.",
+                    publisher, coverage * 100,
+                )
+                stance, stance_confidence = Stance.NEUTRAL, 0.30
+            else:
+                # Tested phrase mapping ("not true" -> False, "half true" ->
+                # Misleading, ...). Unmapped/weak ratings stay NEUTRAL and can
+                # never trigger the definitive early stop below; hedged ratings
+                # ("mostly true/false") contribute at 0.80 without early-stopping.
+                stance, stance_confidence = stance_from_rating(rating)
 
             # Temporal-qualifier guard: a professional check that supports the
             # claim's SUBJECT but for a DIFFERENT time qualifier ("grows taller
