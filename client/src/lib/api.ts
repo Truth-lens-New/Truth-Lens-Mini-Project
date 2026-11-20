@@ -344,7 +344,7 @@ export async function analyzeMedia(file: File): Promise<MediaAnalysisResponse> {
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || 'Media analysis failed');
+        throw new Error(errorData.detail || `Media analysis failed (HTTP ${response.status})`);
     }
 
     return response.json();
