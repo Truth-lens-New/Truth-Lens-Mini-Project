@@ -71,7 +71,11 @@ class EvidenceSynthesizer:
             # Strategy: If stance is NEUTRAL/Unset, check it.
             # If it came from a source that explicitly sets stance (like FactCheck), keep it.
             # CRITICAL FIX: Do NOT re-evaluate Official Records. Trust the strategy logic.
-            if item.source_type == EvidenceType.OFFICIAL_RECORD:
+            # Fact-check items are also professionally determined: their rating
+            # (or the neutral downgrade from the coverage gate) is final. Letting
+            # the ML stance model re-read the label text ("Pants on Fire") as a
+            # debunk of THIS claim produced false FALSE verdicts.
+            if item.source_type in (EvidenceType.OFFICIAL_RECORD, EvidenceType.FACT_CHECK):
                 continue
 
             if item.stance == Stance.NEUTRAL or item.stance_confidence == 0.0:

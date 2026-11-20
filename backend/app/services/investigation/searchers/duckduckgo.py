@@ -99,15 +99,29 @@ class DuckDuckGoSearcher:
         return results
 
     def _run_sync_search(self, query: str, max_results: int, time: Optional[str] = None):
-        """Helper to run sync search in thread."""
+        """Helper to run sync search in thread.
+
+        Tries the configured region first, then falls back to other regions:
+        DuckDuckGo's per-region backends occasionally return nothing or fail,
+        and a single dead region must not zero out the whole search.
+        """
+        fallback_regions = [r for r in ("us-en", "de-de") if r != self.region]
         with DDGS() as ddgs:
-            return ddgs.text(
-                query,
-                region=self.region,
-                safesearch=self.safe_search,
-                max_results=max_results,
-                timelimit=time
-            )
+            for region in [self.region] + fallback_regions:
+                try:
+                    results = ddgs.text(
+                        query,
+                        region=region,
+                        safesearch=self.safe_search,
+                        max_results=max_results,
+                        timelimit=time,
+                    )
+                    if results:
+                        return results
+                except Exception as exc:
+                    print(f"DuckDuckGo region '{region}' failed: {exc}")
+                    continue
+        return []
 
 
 # Singleton instance
