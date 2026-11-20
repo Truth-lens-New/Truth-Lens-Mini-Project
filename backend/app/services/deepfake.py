@@ -374,7 +374,7 @@ class DeepfakeDetector:
         """
         Multi-Patch Analysis — classify overlapping image patches independently.
 
-        Extracts 300x300 overlapping crops at 50% stride from the image at native
+        Samples up to 16 spatially distributed 300x300 crops from the image at native
         resolution and runs each through the model. This catches localised
         manipulations (e.g. face-swap in a larger scene) that can be missed when
         the whole image is resized to a single 300x300 tensor.
@@ -397,7 +397,7 @@ class DeepfakeDetector:
             evidence = []
 
             # Skip patching for small images — just do full-image predict
-            if w < 350 or h < 350:
+            if min(w, h) < patch_size or (w == patch_size and h == patch_size):
                 tensor = self.transform(image).unsqueeze(0).to(self.device)
                 with torch.no_grad():
                     probs = torch.softmax(self.model(tensor), dim=1)
@@ -411,16 +411,26 @@ class DeepfakeDetector:
                     "evidence"           : [],
                 }
 
-            # Stride = 50% overlap
+            # Spread the crop budget over the image, including its far edges.
             stride = patch_size // 2
+            x_span, y_span = w - patch_size, h - patch_size
+            max_cols = 1 + (x_span + stride - 1) // stride
+            max_rows = 1 + (y_span + stride - 1) // stride
+            cols, rows = min(2, max_cols), min(2, max_rows)
+            while True:
+                add_col = cols < max_cols and (cols + 1) * rows <= 16
+                add_row = rows < max_rows and cols * (rows + 1) <= 16
+                if not (add_col or add_row):
+                    break
+                if add_col and (not add_row or x_span / cols >= y_span / rows):
+                    cols += 1
+                else:
+                    rows += 1
 
+            xs = [round(i * x_span / max(cols - 1, 1)) for i in range(cols)]
+            ys = [round(i * y_span / max(rows - 1, 1)) for i in range(rows)]
+            coords = [(x, y) for y in ys for x in xs]
             fake_probs = []
-            xs = list(range(0, w - patch_size + 1, stride))
-            ys = list(range(0, h - patch_size + 1, stride))
-
-            # Cap at 16 patches to keep latency reasonable
-            coords = [(x, y) for y in ys for x in xs][:16]
-
             for (x, y) in coords:
                 crop = image.crop((x, y, x + patch_size, y + patch_size))
                 tensor = self.transform(crop).unsqueeze(0).to(self.device)
@@ -533,7 +543,7 @@ class DeepfakeDetector:
         
         # Patch
         n_suspicious = patch_result.get("suspicious_patches", 0)
-        n_total = patch_result.get("total_patches", 1)
+        n_total = patch_result.get("total_patches", 0)
         patch_ratio = n_suspicious / max(n_total, 1)
         fused_score += patch_ratio * w_patch
         
@@ -541,6 +551,10 @@ class DeepfakeDetector:
         meta_ratio = min(100, metadata_risk) / 100.0
         fused_score += meta_ratio * w_meta
         
+        if n_total == 0:
+            # A failed crop scan contributes no evidence for either class.
+            fused_score /= w_base + w_meta
+
         if is_high_conf:
             max_deviation = 0.05
             capped_score = max(base_fake_prob - max_deviation, min(base_fake_prob + max_deviation, fused_score))
@@ -559,7 +573,7 @@ class DeepfakeDetector:
                 
         return fused_score, fusion_method, evidence
 
-    def predict(self, image_bytes: bytes, check_gemini: bool = True) -> dict:
+    def predict(self, image_bytes: bytes, check_gemini: bool = False) -> dict:
 
         """
         Predict if an image is real or fake.
@@ -946,7 +960,7 @@ async def analyze_image_for_deepfake(image_bytes: bytes, content_type: str = "im
     - All other frames are processed directly by our local model.
 
     For images:
-    - Runs standard image inference (Gemini SynthID + local CNN/MultiPatch).
+    - Runs local CNN and multi-patch inference.
     """
     detector = get_deepfake_detector()
     loop = asyncio.get_event_loop()
