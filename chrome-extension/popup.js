@@ -285,21 +285,25 @@ async function logout() {
 async function importWebSessionToken() {
   setStatus("Scanning for TruthLens web session...");
 
-  // Find ANY open TruthLens tab automatically (doesn't need to be active)
-  let tabs = [];
-  try {
-    tabs = await chrome.tabs.query({ url: "http://localhost:5173/*" });
-  } catch {
-    tabs = [];
-  }
+  // Find ANY open TruthLens tab automatically (doesn't need to be active).
+  // Covers the Vite dev server (:5173) and the production container (:8081).
+  const tabUrlPatterns = [
+    "http://localhost:5173/*",
+    "http://127.0.0.1:5173/*",
+    "http://localhost:8081/*",
+    "http://127.0.0.1:8081/*",
+  ];
 
-  // Fallback: also search http://127.0.0.1:5173/*
-  if (!tabs.length) {
+  let tabs = [];
+  for (const pattern of tabUrlPatterns) {
     try {
-      const fallback = await chrome.tabs.query({ url: "http://127.0.0.1:5173/*" });
-      tabs = fallback;
+      const found = await chrome.tabs.query({ url: pattern });
+      if (found && found.length) {
+        tabs = found;
+        break;
+      }
     } catch {
-      tabs = [];
+      // ignore and try the next pattern
     }
   }
 

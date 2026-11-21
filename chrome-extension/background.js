@@ -55,6 +55,17 @@ async function apiRequest(path, options = {}) {
     payload = null;
   }
 
+  if (response.status === 401) {
+    // Expired/invalid JWT (24h expiry): drop the stale token so the UI can
+    // prompt for a fresh login instead of failing forever with "HTTP 401".
+    await setStorage({ authToken: "", authEmail: "" }).catch(() => {});
+    const authError = new Error(
+      "Session expired. Please log in again in the extension (or use Sync Web Auth).",
+    );
+    authError.code = "AUTH_REQUIRED";
+    throw authError;
+  }
+
   if (!response.ok) {
     const detail =
       payload && payload.detail ? payload.detail : `HTTP ${response.status}`;
