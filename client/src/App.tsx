@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Navigate, Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { LandingPage } from './components/LandingPage';
 import { LoginPage } from './components/LoginPage';
 import { RegisterPage } from './components/RegisterPage';
@@ -13,7 +13,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { Navigation } from './components/Navigation';
 import { ComingSoonOverlay } from './components/ComingSoonOverlay';
 import { InvestigationPage } from './components/InvestigationPage';
-import { isAuthenticated, logout } from './lib/api';
+import { getUserStats, isAuthenticated, logout } from './lib/api';
 import { ThemeProvider } from 'next-themes';
 
 export type UserMode = 'Basic' | 'Creator' | 'Professional';
@@ -42,12 +42,22 @@ function AppContent() {
   const [userEmail, setUserEmail] = useState<string | undefined>();
 
   useEffect(() => {
-    setAuthenticated(isAuthenticated());
+    if (!isAuthenticated()) {
+      setAuthenticated(false);
+      return;
+    }
+
+    // A JWT can be malformed, revoked, or signed with an older development
+    // key even when its expiry is still in the future. Confirm it with the
+    // backend before leaving protected screens available.
+    void getUserStats()
+      .then(() => setAuthenticated(true))
+      .catch(() => setAuthenticated(false));
   }, []);
 
   // Handle navigation with auth protection
   const handleNavigate = (page: Page) => {
-    const protectedPages: Page[] = ['dashboard', 'verify-media', 'verify-article', 'history', 'projects', 'organization', 'settings'];
+    const protectedPages: Page[] = ['dashboard', 'verify-media', 'verify-article', 'investigate', 'history', 'projects', 'organization', 'settings'];
 
     if (protectedPages.includes(page) && !authenticated) {
       navigate('/login');
@@ -79,7 +89,7 @@ function AppContent() {
   };
 
   const currentPage = getCurrentPage();
-  const showNav = authenticated || location.pathname === '/investigate' || ['/', '/login', '/register'].includes(location.pathname);
+  const showNav = authenticated || ['/', '/login', '/register'].includes(location.pathname);
 
   return (
     <div className={`min-h-screen bg-background text-foreground transition-colors duration-300 ${['landing', 'login', 'register'].includes(currentPage) ? '' : 'pt-24'}`}>
@@ -119,7 +129,7 @@ function AppContent() {
           <Route path="/dashboard" element={<Dashboard onNavigate={handleNavigate} userMode={userMode} />} />
           <Route path="/verify-media" element={<ImageVideoUpload userMode={userMode} />} />
           <Route path="/verify-article" element={<ArticleVerification userMode={userMode} onNavigate={handleNavigate} isAuthenticated={authenticated} />} />
-          <Route path="/investigate" element={<InvestigationPage />} />
+          <Route path="/investigate" element={authenticated ? <InvestigationPage /> : <Navigate to="/login" replace />} />
           <Route path="/history" element={<HistoryPage onNavigate={handleNavigate} />} />
           <Route path="/projects" element={
             <ComingSoonOverlay title="Projects">

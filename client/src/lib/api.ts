@@ -152,7 +152,22 @@ export function logout() {
 }
 
 export function isAuthenticated(): boolean {
-    return !!localStorage.getItem('token');
+    const token = localStorage.getItem('token');
+    if (!token) return false;
+
+    try {
+        const payloadPart = token.split('.')[1];
+        if (!payloadPart) return false;
+        const base64 = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
+        const payload = JSON.parse(atob(base64));
+
+        // JWT expiry is enough to prevent a stale local token from exposing
+        // authenticated UI after a browser restart. Signature validation stays
+        // on the backend, where it belongs.
+        return typeof payload.exp !== 'number' || payload.exp * 1000 > Date.now();
+    } catch {
+        return false;
+    }
 }
 
 // --- Analysis ---
@@ -265,7 +280,7 @@ export async function analyzeClaimV3(text: string): Promise<V3AnalyzeResponse> {
 /**
  * Investigate a claim using V3 pipeline - full evidence gathering and verdict
  */
-export async function investigateClaim(content: string, inputType: 'text' | 'url' | 'image' = 'text'): Promise<V3InvestigateResponse> {
+export async function investigateClaim(content: string, inputType: 'text' | 'url' | 'image' = 'text', signal?: AbortSignal): Promise<V3InvestigateResponse> {
     const token = localStorage.getItem('token');
     const headers: HeadersInit = {
         'Content-Type': 'application/json',
@@ -273,10 +288,20 @@ export async function investigateClaim(content: string, inputType: 'text' | 'url
     };
 
     const response = await fetch(`${API_URL}/api/v3/investigate`, {
+        signal,
         method: 'POST',
         headers,
         body: JSON.stringify({ content, input_type: inputType }),
     });
+
+    // V3 investigations require the same authenticated session as the legacy
+    // analysis endpoints. Clear an expired or invalid saved token so the user
+    // is taken back to login instead of remaining on a failing investigation.
+    if (response.status === 401) {
+        logout();
+        window.location.href = '/login';
+        throw new Error('Your session has expired. Please sign in again.');
+    }
 
     if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));

@@ -757,7 +757,13 @@ export function InvestigationPage() {
         }
 
         // --- 1. Start API Request (Async) ---
-        const apiPromise = investigateClaim(contentToUse, inputType);
+        const controller = new AbortController();
+        const timeoutId = window.setTimeout(() => controller.abort(), 300000);
+        // Handle rejection immediately, including during the progress animation.
+        const apiPromise = investigateClaim(contentToUse, inputType, controller.signal)
+            .then(response => ({ response, error: null }))
+            .catch(error => ({ response: null, error }))
+            .finally(() => window.clearTimeout(timeoutId));
 
         // --- 2. Animate Pre-Processing Steps (Fast) ---
         // We move through these quickly as they are essentially "setup" steps
@@ -789,11 +795,14 @@ export function InvestigationPage() {
         }
 
         try {
-            // Await the actual result (with a 60-second safety timeout)
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('Investigation timed out. The server took longer than expected to gather external sources. Please try again.')), 60000)
-            );
-            const response = await Promise.race([apiPromise, timeoutPromise]) as any;
+            const outcome = await apiPromise;
+            if (outcome.error) {
+                if (controller.signal.aborted) {
+                    throw new Error('Investigation exceeded five minutes. The first request may need to download and load AI models. Please wait before retrying.');
+                }
+                throw outcome.error;
+            }
+            const response = outcome.response!;
 
             setCompletedSteps(prev => [...prev, 'analyzing_stance']);
 
